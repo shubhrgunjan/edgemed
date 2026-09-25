@@ -10,6 +10,11 @@
 
 > **One-Line Description:** An autonomous, offline-first clinical decision-support memory platform that separates vector semantic recall, relational knowledge graphs, and temporal event progressions on resource-constrained edge devices with privacy-governed cloud synchronization.
 
+ ### Built Under Team LEX:
+ - Aryan Vishwakarma (Leader🙏)
+ - Farhan Akhtar
+ - Shubhr Gunjan
+
 ---
 
 > [!IMPORTANT]
