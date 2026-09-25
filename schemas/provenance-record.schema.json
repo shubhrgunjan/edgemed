@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/provenance-record.schema.json",
+  "title": "ProvenanceRecord",
+  "description": "Cryptographic audit trail and transformation lineage for memory records",
+  "type": "object",
+  "required": [
+    "origin_device_id",
+    "created_at",
+    "generator_modality"
+  ],
+  "properties": {
+    "origin_device_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "generator_modality": { "type": "string" },
+    "parent_memory_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "source_document_hash": { "type": ["string", "null"] },
+    "transformation_pipeline": { "type": ["string", "null"] },
+    "revision_count": { "type": "integer", "default": 0 },
+    "last_sync_timestamp": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": false
+}

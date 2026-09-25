@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/search-result.schema.json",
+  "title": "SearchResult",
+  "description": "Scored memory candidate with multi-pillar score attribution",
+  "type": "object",
+  "required": [
+    "memory_id",
+    "content",
+    "category",
+    "composite_score",
+    "attribution"
+  ],
+  "properties": {
+    "memory_id": { "type": "string" },
+    "content": { "type": "string" },
+    "category": { "type": "string" },
+    "patient_id": { "type": ["string", "null"] },
+    "composite_score": { "type": "number" },
+    "attribution": {
+      "type": "object",
+      "required": ["dense_cosine_score", "sparse_bm25_score", "rrf_score"],
+      "properties": {
+        "dense_cosine_score": { "type": "number" },
+        "dense_rank": { "type": "integer" },
+        "sparse_bm25_score": { "type": "number" },
+        "sparse_rank": { "type": "integer" },
+        "rrf_score": { "type": "number" },
+        "graph_boost": { "type": "number" },
+        "temporal_decay": { "type": "number" },
+        "matched_entities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "highlight_snippets": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

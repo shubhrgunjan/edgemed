@@ -1,0 +1,46 @@
+sequenceDiagram
+    autonumber
+    actor Clinician as Clinician (Device A)
+    participant UI_A as Memory Lab HUD (Device A)
+    participant Edge_A as Qdrant Edge (Device A)
+    participant Gov_A as Memory Governor / Firewall (Device A)
+    participant Cloud as Central Qdrant Server
+    participant Edge_B as Qdrant Edge (Device B - Peer)
+    actor Clinician_B as Clinician (Device B)
+
+    Note over Clinician,Cloud: STEP 1 & 2: Initial Online Synchronization
+    UI_A->>Cloud: Connect to Central Server (Online Baseline)
+    Cloud-->>Edge_A: Sync Global Medical Protocols Shard
+
+    Note over Clinician,Edge_A: STEP 3: Network Disappears (Airplane Mode Activated)
+    Clinician->>UI_A: Toggle Airplane Mode / Sever Network
+    UI_A-->>Clinician: UI updates: [● OFFLINE MODE: 100% Autonomous]
+
+    Note over Clinician,Edge_A: STEP 4 & 5: Offline Semantic Search
+    Clinician->>UI_A: Search "acute wheezing and respiratory distress"
+    UI_A->>Edge_A: Query In-Process Mutable & Immutable Shards
+    Edge_A-->>UI_A: Ranked Candidates returned in <4ms (Zero Network Packets)
+    UI_A-->>Clinician: Render Results + Score Attribution Chips
+
+    Note over Clinician,Gov_A: STEP 6, 7 & 8: Ingest New Observation Offline & Governance
+    Clinician->>UI_A: Ingest: "Patient tachycardic, HR 125, SpO2 89%"
+    UI_A->>Edge_A: Store in Local Mutable Shard (Immediate Persistence)
+    UI_A->>Gov_A: Evaluate Retention Score (G_score: 0.82 -> SYNC_CANDIDATE)
+    Gov_A-->>UI_A: Enqueue in SQLite Persistent Queue (Status: PENDING)
+
+    Note over Clinician,Cloud: STEP 9, 10, 11 & 12: Network Reconnects & Privacy Scrubbing
+    Clinician->>UI_A: Reconnect Network
+    UI_A->>Gov_A: Privacy Firewall inspects queued memory
+    Gov_A->>Gov_A: Scrub synthetic patient identifiers; retain clinical findings
+    Gov_A->>Cloud: Batch Upsert Points (Status: COMMITTED)
+    Cloud-->>UI_A: Acknowledge Points Received
+
+    Note over Cloud,Clinician_B: STEP 13 & 14: Peer Device Receives Update via Snapshot
+    Cloud->>Cloud: Re-index HNSW and Generate Partial Snapshot Manifest
+    Edge_B->>Cloud: Check Manifest -> Download Partial Snapshot Delta
+    Edge_B->>Edge_B: Mount New Segments & Update Knowledge Graph
+    Clinician_B->>Edge_B: Query Patient History -> New Observation Visible!
+
+    Note over Clinician,UI_A: STEP 15: Provenance Remains Completely Visible
+    Clinician->>UI_A: Open Memory Inspector on Observation
+    UI_A-->>Clinician: Renders Complete Origin Device, Hashes, and Parent DAG

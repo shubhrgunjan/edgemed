@@ -1,0 +1,46 @@
+name: Documentation & Schema Validation
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  validate-specs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Validation Tools
+        run: |
+          pip install jsonschema pyyaml
+
+      - name: Validate JSON Schemas
+        run: |
+          python -c "
+          import json, glob, jsonschema
+          for schema_file in glob.glob('schemas/*.json'):
+              with open(schema_file) as f:
+                  data = json.load(f)
+                  print(f'Validating schema: {schema_file}')
+                  jsonschema.Draft202012Validator.check_schema(data)
+          print('All JSON Schemas are strictly valid.')
+          "
+
+      - name: Validate OpenAPI Contract
+        run: |
+          python -c "
+          import yaml
+          with open('api/openapi/openapi.yaml') as f:
+              spec = yaml.safe_load(f)
+              assert 'openapi' in spec
+              assert 'paths' in spec
+              print(f'OpenAPI specification verified: {len(spec[\"paths\"])} paths loaded.')
+          "

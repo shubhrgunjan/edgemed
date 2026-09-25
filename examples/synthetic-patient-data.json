@@ -1,0 +1,58 @@
+[
+  {
+    "patient_id": "patient_synthetic_101",
+    "name": "Alex Vance (Synthetic)",
+    "dob_year": 1982,
+    "gender": "M",
+    "blood_type": "O_POS",
+    "allergies": [
+      {
+        "allergen": "Penicillin",
+        "severity": "SEVERE_ANAPHYLAXIS",
+        "verified_at": "2024-03-12T09:00:00Z"
+      }
+    ],
+    "chronic_conditions": [
+      {
+        "name": "Type 2 Diabetes Mellitus",
+        "icd10": "E11.9",
+        "diagnosed_at": "2020-05-14T00:00:00Z"
+      }
+    ],
+    "active_medications": [
+      {
+        "name": "Metformin",
+        "dose": "500mg BID",
+        "rxnorm": "6809"
+      }
+    ]
+  },
+  {
+    "patient_id": "patient_synthetic_104",
+    "name": "Elena Rostova (Synthetic)",
+    "dob_year": 1978,
+    "gender": "F",
+    "blood_type": "A_NEG",
+    "allergies": [
+      {
+        "allergen": "Latex",
+        "severity": "MODERATE_CONTACT_DERMATITIS",
+        "verified_at": "2023-11-20T14:30:00Z"
+      }
+    ],
+    "chronic_conditions": [
+      {
+        "name": "Severe Persistent Asthma",
+        "icd10": "J45.5",
+        "diagnosed_at": "2018-09-01T00:00:00Z"
+      }
+    ],
+    "active_medications": [
+      {
+        "name": "Fluticasone/Salmeterol Inhaler",
+        "dose": "250/50mcg BID",
+        "rxnorm": "351314"
+      }
+    ]
+  }
+]

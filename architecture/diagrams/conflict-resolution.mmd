@@ -1,0 +1,15 @@
+flowchart TD
+    INBOUND["Inbound Replicated Memory Point"] --> EXISTS{"Does Point ID or Exact Subject Match Local Memory?"}
+    
+    EXISTS -->|NO| INSERT_DIRECT["Insert as New Non-Conflicting Node"]
+    
+    EXISTS -->|YES| CHECK_VER{"Compare Monotonic Versions & Timestamps"}
+    
+    CHECK_VER -->|"Inbound Version > Local Version AND Local is Unmodified"| FAST_FORWARD["Fast-Forward (Apply Inbound Update)"]
+    CHECK_VER -->|"Inbound Version <= Local Version"| DROP_STALE["Reject Stale Inbound Record"]
+    
+    CHECK_VER -->|"Concurrent Offline Modification on Same Clinical Entity"| BRANCH["BRANCHING CONTRADICTION DETECTED"]
+    
+    BRANCH --> CONTRADICTS_EDGE["Establish Directed CONTRADICTS Graph Edge"]
+    CONTRADICTS_EDGE --> STATE_REVIEW["Set Both Records to REQUIRES_REVIEW State"]
+    STATE_REVIEW --> HUD["Display Red Conflict Card in Memory Lab for Clinician Adjudication"]

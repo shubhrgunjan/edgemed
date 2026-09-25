@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/entity.schema.json",
+  "title": "GraphEntity",
+  "description": "Ontological entity node in the Knowledge Graph",
+  "type": "object",
+  "required": ["id", "type", "label", "properties"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique entity identifier (e.g., patient_104, cond_asthma)"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["Patient", "Condition", "Medication", "Procedure", "Observation", "Event", "Document"]
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable display name"
+    },
+    "properties": {
+      "type": "object",
+      "description": "Domain-specific attributes (ICD-10, RxNorm, vital values)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

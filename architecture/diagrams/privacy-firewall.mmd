@@ -1,0 +1,13 @@
+flowchart TD
+    RAW["Raw Local Clinical Memory"] --> SENS["Sensitivity Analysis<br/>(Identifier Regex & Clinical Taxonomy Scanners)"]
+    SENS --> POLICY{"Evaluate Privacy Policy Tier"}
+    
+    POLICY -->|"Tier: HIGHLY_SENSITIVE<br/>(Psychiatric, Genetic, Identifiable)"| BLOCK["BLOCK FROM CLOUD SYNC<br/>Hard Pin to Local Device"]
+    
+    POLICY -->|"Tier: SENSITIVE<br/>(General Clinical Vitals & Findings)"| REDACT["SCRUB IDENTIFIERS<br/>Strip Names, Room #, DOB<br/>Assign Anonymized Subject Token"]
+    
+    POLICY -->|"Tier: INTERNAL / PUBLIC<br/>(Protocols, Operational Telemetry)"| PERMIT["PASS UNCHANGED"]
+    
+    REDACT --> ENQUEUE["Insert into SQLite Sync Queue (PENDING)"]
+    PERMIT --> ENQUEUE
+    BLOCK --> AUDIT["Log Local Privacy Pin Event"]

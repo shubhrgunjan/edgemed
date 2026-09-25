@@ -1,0 +1,12 @@
+flowchart TD
+    INPUTS["Memory Input Signals<br/>- Importance (I)<br/>- Confidence (C)<br/>- Recurrence (R)<br/>- Freshness (F)<br/>- Privacy Tier (P)<br/>- Device Specificity (D)"] --> PRIV_CHECK{"Is Privacy Tier == HIGHLY_SENSITIVE?"}
+    
+    PRIV_CHECK -->|YES| DECIDE_LOCAL["DECISION: LOCAL<br/>(Hard Pin to Edge Device Storage)"]
+    
+    PRIV_CHECK -->|NO| COMPUTE["Compute Governance Score:<br/>G_score = 0.35*I + 0.20*C + 0.15*log2(1+R) + 0.15*F - 0.25*D"]
+    
+    COMPUTE --> EVAL{"Evaluate Thresholds"}
+    
+    EVAL -->|"G_score >= 0.70 AND P in (PUBLIC, INTERNAL, SENSITIVE)"| DECIDE_SYNC["DECISION: SYNC_CANDIDATE<br/>(Enqueue in Outbound Sync Queue)"]
+    EVAL -->|"0.25 <= G_score < 0.70 OR D > 0.80"| DECIDE_LOCAL
+    EVAL -->|"G_score < 0.25 AND I < 0.30"| DECIDE_EXPIRE["DECISION: EXPIRE<br/>(Pruned during Storage Pressure)"]

@@ -1,0 +1,17 @@
+flowchart TD
+    QUERY["Incoming Search Query"] --> NET{"Is Network Link Active?"}
+    
+    NET -->|NO (Offline)| ROUTE_EDGE["ROUTE: EDGE<br/>(100% In-Process Local Shard)"]
+    
+    NET -->|YES (Online)| PRIV{"Query Contains Patient PHI / Identifier?"}
+    
+    PRIV -->|YES (Sensitive Data)| ROUTE_EDGE
+    
+    PRIV -->|NO (De-identified/General)| LAT{"Strict Latency Target < 25ms?"}
+    
+    LAT -->|YES (Acute Triage)| ROUTE_EDGE
+    
+    LAT -->|NO (Research Query)| CONF{"Local Probe Confidence >= 0.72?"}
+    
+    CONF -->|YES (High Local Confidence)| ROUTE_EDGE
+    CONF -->|NO (Sparse Local Knowledge)| ROUTE_HYBRID["ROUTE: HYBRID<br/>(Local Edge + Cloud RRF Fusion)"]

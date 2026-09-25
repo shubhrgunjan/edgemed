@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/memory.schema.json",
+  "title": "MemoryRecord",
+  "description": "Unified 18-attribute clinical memory representation for EdgeMed",
+  "type": "object",
+  "required": [
+    "id",
+    "content",
+    "timestamp",
+    "source",
+    "device_id",
+    "category",
+    "confidence",
+    "importance",
+    "privacy_level",
+    "lifecycle_state",
+    "sync_state",
+    "version",
+    "provenance"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Deterministic UUIDv5 derived from device ID, timestamp, and content hash"
+    },
+    "content": {
+      "type": "string",
+      "description": "Raw clinical observation or note text"
+    },
+    "embedding": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 384,
+      "maxItems": 384,
+      "description": "384-dimensional dense vector generated via FastEmbed (bge-small-en-v1.5)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of clinical observation capture"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["CLINICIAN_ENTRY", "TRIAGE_VITALS", "LAB_REPORT", "IMAGING_REPORT", "SYSTEM_CONSOLIDATED"]
+    },
+    "device_id": {
+      "type": "string",
+      "description": "Unique physical identifier of the capturing edge node"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["SYMPTOM", "DIAGNOSIS", "MEDICATION", "ALLERGY", "PROCEDURE", "VITAL_SIGN", "PROTOCOL"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Observational certainty score"
+    },
+    "importance": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Clinical criticalness score"
+    },
+    "recurrence": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Frequency count of repeated observations"
+    },
+    "freshness": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calculated dynamic temporal decay score"
+    },
+    "privacy_level": {
+      "type": "string",
+      "enum": ["PUBLIC", "INTERNAL", "SENSITIVE", "HIGHLY_SENSITIVE"],
+      "default": "SENSITIVE"
+    },
+    "provenance": {
+      "$ref": "provenance-record.schema.json"
+    },
+    "entities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Foreign keys to entities in the Knowledge Graph"
+    },
+    "relations": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Explicit directed edges linking to other memory records"
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["LOCAL", "SYNC_CANDIDATE", "EXPIRED", "CONSOLIDATED_ARCHIVED", "CONFLICTING"],
+      "default": "LOCAL"
+    },
+    "sync_state": {
+      "type": "string",
+      "enum": ["PENDING", "SYNCING", "COMMITTED", "FAILED"],
+      "default": "PENDING"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    }
+  },
+  "additionalProperties": false
+}

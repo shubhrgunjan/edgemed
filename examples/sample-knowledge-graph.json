@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    {
+      "data": {
+        "id": "node_patient_104",
+        "label": "Elena Rostova (P-104)",
+        "type": "Patient",
+        "properties": {
+          "gender": "F",
+          "dob_year": 1978,
+          "blood_type": "A_NEG"
+        }
+      }
+    },
+    {
+      "data": {
+        "id": "node_cond_asthma",
+        "label": "Severe Persistent Asthma",
+        "type": "Condition",
+        "properties": {
+          "icd10": "J45.5",
+          "severity": "HIGH",
+          "acuity": "CHRONIC"
+        }
+      }
+    },
+    {
+      "data": {
+        "id": "node_drug_albuterol",
+        "label": "Albuterol Sulfate",
+        "type": "Medication",
+        "properties": {
+          "rxnorm": "435",
+          "class": "Beta-2 Agonist",
+          "route": "Inhalation"
+        }
+      }
+    },
+    {
+      "data": {
+        "id": "node_drug_propranolol",
+        "label": "Propranolol",
+        "type": "Medication",
+        "properties": {
+          "rxnorm": "8787",
+          "class": "Non-selective Beta Blocker",
+          "contraindicated": true
+        }
+      }
+    },
+    {
+      "data": {
+        "id": "node_obs_wheeze",
+        "label": "Acute Expiratory Wheeze",
+        "type": "Observation",
+        "properties": {
+          "confidence": 0.95,
+          "timestamp": "2026-09-26T14:15:00Z"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "data": {
+        "id": "edge_p104_has_asthma",
+        "source": "node_patient_104",
+        "target": "node_cond_asthma",
+        "label": "HAS_CONDITION",
+        "weight": 1.0
+      }
+    },
+    {
+      "data": {
+        "id": "edge_asthma_treated_albuterol",
+        "source": "node_cond_asthma",
+        "target": "node_drug_albuterol",
+        "label": "TREATED_WITH",
+        "weight": 0.95
+      }
+    },
+    {
+      "data": {
+        "id": "edge_asthma_contra_propranolol",
+        "source": "node_drug_propranolol",
+        "target": "node_cond_asthma",
+        "label": "CONTRADICTS",
+        "weight": 1.0
+      }
+    },
+    {
+      "data": {
+        "id": "edge_obs_mentions_asthma",
+        "source": "node_obs_wheeze",
+        "target": "node_cond_asthma",
+        "label": "MENTIONS",
+        "weight": 0.88
+      }
+    }
+  ]
+}

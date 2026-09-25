@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> STATE_OFFLINE : Cold Boot / Default
+
+    STATE_OFFLINE --> STATE_LINK_PROBING : Network Interface Detected Up
+    STATE_LINK_PROBING --> STATE_ONLINE : mTLS Handshake & Ping Validated (<300ms)
+    STATE_LINK_PROBING --> STATE_DEGRADED : High Jitter / Packet Loss > 20%
+    STATE_LINK_PROBING --> STATE_OFFLINE : Cloud Unreachable (Timeout > 1500ms)
+
+    STATE_ONLINE --> STATE_DEGRADED : Connection Degrades (Jitter > 200ms)
+    STATE_ONLINE --> STATE_OFFLINE : Physical Link Lost (0 Packets)
+
+    STATE_DEGRADED --> STATE_ONLINE : Stable Ping Restored (3 Consecutive Probes)
+    STATE_DEGRADED --> STATE_OFFLINE : Physical Link Lost
+
+    state STATE_ONLINE {
+        [*] --> SYNC_IDLE
+        SYNC_IDLE --> SYNC_UPLOADING : Outbound Queue > 0
+        SYNC_UPLOADING --> SYNC_DOWNLOADING : Upload Succeeded
+        SYNC_DOWNLOADING --> SYNC_IDLE : Differential Snapshot Applied
+    }
+
+    state STATE_OFFLINE {
+        [*] --> LOCAL_INGESTION
+        LOCAL_INGESTION --> LOCAL_SEARCH : In-Process Qdrant Edge
+        LOCAL_SEARCH --> QUEUE_ACCUMULATION : Persist Sync Items to SQLite
+    }

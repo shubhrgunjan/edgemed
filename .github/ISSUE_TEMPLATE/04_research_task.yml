@@ -1,0 +1,26 @@
+name: "Research & Benchmarking Task"
+description: "Propose an empirical investigation or technology evaluation"
+title: "[RESEARCH]: "
+labels: ["research", "benchmark"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Research Objective
+      description: What specific technological question or benchmark are we investigating?
+    validations:
+      required: true
+  - type: textarea
+    id: methodology
+    attributes:
+      label: Methodology & Benchmark Setup
+      description: Hardware setup, models tested, and measurement parameters.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Primary Sources & Documentation URLs
+      description: Upstream documentation links and empirical references.
+    validations:
+      required: true

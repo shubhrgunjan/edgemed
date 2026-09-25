@@ -1,0 +1,26 @@
+sequenceDiagram
+    autonumber
+    participant App as EdgeMed Core
+    participant SQLite as SQLite Sync Queue
+    participant Shard as Local Qdrant Edge Shard
+    participant Server as Central Qdrant Server
+
+    Note over App,Server: UPLINK PHASE: Points Replicated to Server
+    App->>SQLite: Fetch batch of PENDING records (Limit: 10)
+    SQLite-->>App: Return PointStruct items
+    App->>Server: POST /collections/{name}/points (Batch Upsert via mTLS)
+    alt Upload Succeeded (HTTP 200)
+        Server-->>App: Acknowledge Points Written
+        App->>SQLite: UPDATE sync_queue SET status = 'COMMITTED'
+    else Network Lost or Timeout
+        App->>SQLite: Increment retry_count, status = 'PENDING'
+        Note over App: Apply Exponential Backoff with Jitter
+    end
+
+    Note over App,Server: DOWNLINK PHASE: Differential Snapshot Recovery
+    App->>Shard: Extract local snapshot manifest JSON
+    Shard-->>App: Local Manifest (Segment Hashes)
+    App->>Server: POST /collections/{name}/shards/{id}/snapshot/partial/create
+    Server-->>App: Stream partial.snapshot (Changed segments only)
+    App->>Shard: EdgeShard.recover_partial_snapshot(...)
+    Shard-->>App: Manifest Updated & Snapshot Mounted

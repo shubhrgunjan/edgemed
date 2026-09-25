@@ -1,0 +1,19 @@
+name: "Documentation Improvement"
+description: "Propose an update or refinement to the repository documentation"
+title: "[DOCS]: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Documentation Scope
+      description: Which markdown file(s) or architecture diagrams are affected?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_changes
+    attributes:
+      label: Proposed Updates
+      description: Summary of the changes, clarity enhancements, or corrections.
+    validations:
+      required: true

@@ -1,0 +1,12 @@
+graph TD
+    P[Patient: Patient_Synthetic_104] -->|HAS_CONDITION| C[Condition: AcuteBronchospasm]
+    C -->|TREATED_WITH| M[Medication: AlbuterolNebulizer]
+    P -->|UNDERWENT| PR[Procedure: SpirometryTest]
+    P -->|HAS_EVENT| E[Event: TriageAdmission]
+    O[Observation: WheezingAndDyspnea] -->|MENTIONS| C
+    O -->|MENTIONS| M
+    O -->|HAS_EVENT| E
+    D[Document: TriageNote_Bay2.txt] -->|MENTIONS| P
+    O -->|DERIVED_FROM| D
+    O2[Observation: StridorWithHypotension] -->|CONTRADICTS| O
+    O3[Observation: ConfirmedBronchospasmPostMeds] -->|SUPERSEDES| O

@@ -1,0 +1,25 @@
+stateDiagram-v2
+    [*] --> STATE_INGESTED : Raw Clinical Input
+    
+    STATE_INGESTED --> STATE_GOVERNED : Memory Governor Evaluates
+    
+    STATE_GOVERNED --> STATE_LOCAL_ACTIVE : Verdict: LOCAL (Pinned to Device)
+    STATE_GOVERNED --> STATE_SYNC_PENDING : Verdict: SYNC_CANDIDATE
+    STATE_GOVERNED --> STATE_EXPIRED : Verdict: EXPIRE (Pruned / Purged)
+    
+    state STATE_SYNC_PENDING {
+        [*] --> PRIVACY_SCRUBBING
+        PRIVACY_SCRUBBING --> ENQUEUED_IN_SQLITE
+        ENQUEUED_IN_SQLITE --> TRANSMITTING
+        TRANSMITTING --> COMMITTED_TO_CLOUD
+    }
+    
+    COMMITTED_TO_CLOUD --> STATE_SYNCHRONIZED_ACTIVE
+    
+    STATE_LOCAL_ACTIVE --> STATE_CONSOLIDATED : Consolidation Clusters Repetitions
+    STATE_SYNCHRONIZED_ACTIVE --> STATE_CONSOLIDATED : Consolidation Clusters Repetitions
+    
+    STATE_LOCAL_ACTIVE --> STATE_CONFLICTING : Opposing Assertion Detected
+    STATE_SYNCHRONIZED_ACTIVE --> STATE_CONFLICTING : Opposing Assertion Detected
+    
+    STATE_CONSOLIDATED --> STATE_ARCHIVED : Historical Audit Lineage Retained

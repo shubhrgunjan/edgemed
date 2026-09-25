@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/event.schema.json",
+  "title": "TemporalEvent",
+  "description": "Longitudinal event entry in the patient care timeline",
+  "type": "object",
+  "required": [
+    "event_id",
+    "patient_id",
+    "stage",
+    "timestamp",
+    "description"
+  ],
+  "properties": {
+    "event_id": { "type": "string" },
+    "patient_id": { "type": "string" },
+    "event_sequence": { "type": "integer", "minimum": 1 },
+    "stage": {
+      "type": "string",
+      "enum": ["OBSERVATION", "FOLLOW_UP", "TREATMENT", "OUTCOME"]
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "prior_event_id": { "type": ["string", "null"] },
+    "clinical_acuity_delta": { "type": "number" },
+    "description": { "type": "string" },
+    "vitals_snapshot": { "type": "object" },
+    "linked_memory_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

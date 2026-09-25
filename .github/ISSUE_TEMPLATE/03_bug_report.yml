@@ -1,0 +1,26 @@
+name: "Bug / Architectural Defect Report"
+description: "Report an architectural inconsistency, schema error, or edge failure"
+title: "[BUG]: "
+labels: ["bug", "defect"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Defect Summary
+      description: Clear explanation of the bug or architectural defect.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Steps or commands to observe the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened according to specifications?
+    validations:
+      required: true

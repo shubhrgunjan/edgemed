@@ -1,0 +1,26 @@
+name: "Feature Specification"
+description: "Specify a new capability or module in accordance with PS03"
+title: "[FEAT]: "
+labels: ["enhancement", "specification"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: Detailed description of the proposed feature.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements_trace
+    attributes:
+      label: Requirements Traceability
+      description: Which Requirement ID (e.g., REQ-EDGE-001) does this support?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How will this feature be verified in tests and the demo?
+    validations:
+      required: true

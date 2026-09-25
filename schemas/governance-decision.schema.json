@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/governance-decision.schema.json",
+  "title": "GovernanceDecision",
+  "description": "Evaluation output and factor breakdown from the Memory Governor",
+  "type": "object",
+  "required": [
+    "memory_id",
+    "previous_state",
+    "new_state",
+    "governance_score",
+    "factors",
+    "explanation"
+  ],
+  "properties": {
+    "memory_id": { "type": "string" },
+    "previous_state": {
+      "type": "string",
+      "enum": ["LOCAL", "SYNC_CANDIDATE", "EXPIRED", "CONSOLIDATED_ARCHIVED", "CONFLICTING"]
+    },
+    "new_state": {
+      "type": "string",
+      "enum": ["LOCAL", "SYNC_CANDIDATE", "EXPIRED"]
+    },
+    "governance_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "factors": {
+      "type": "object",
+      "required": ["importance", "confidence", "freshness", "device_specificity"],
+      "properties": {
+        "importance": { "type": "number" },
+        "confidence": { "type": "number" },
+        "freshness": { "type": "number" },
+        "recurrence": { "type": "integer" },
+        "device_specificity": { "type": "number" },
+        "access_frequency": { "type": "integer" }
+      }
+    },
+    "explanation": { "type": "string" }
+  },
+  "additionalProperties": false
+}

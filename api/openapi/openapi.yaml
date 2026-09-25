@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: EdgeMed Memory Lab API Contract
+  version: 1.0.0
+  description: >
+    Official REST API specification for the EdgeMed Edge Memory & Intelligence Platform.
+    Authoritative specification for Code Cubicle 6.0 (Problem Statement 03).
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local In-Process Edge Engine Loopback
+
+paths:
+  /api/status:
+    get:
+      summary: System Health & Network State
+      description: Returns immediate uptime, version, and connectivity status.
+      responses:
+        '200':
+          description: Health payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  version: {type: string}
+                  network_state: {type: string}
+                  uptime_seconds: {type: number}
+
+  /api/stats:
+    get:
+      summary: High-Level Dashboard Statistics
+      responses:
+        '200':
+          description: Statistics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_memories: {type: integer}
+                  active_patients: {type: integer}
+                  conflicting_memories: {type: integer}
+                  pending_sync_items: {type: integer}
+
+  /api/system:
+    get:
+      summary: Hardware & Storage Telemetry
+      responses:
+        '200':
+          description: Edge hardware telemetry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cpu_usage_percent: {type: number}
+                  memory_working_set_mb: {type: number}
+                  memory_system_total_mb: {type: number}
+
+  /api/memories:
+    get:
+      summary: Query Paginated Memory Points
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 25}
+        - name: category
+          in: query
+          schema: {type: string}
+        - name: patient_id
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: List of memory records
+    post:
+      summary: Ingest New Clinical Observation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, category, importance, confidence]
+              properties:
+                content: {type: string}
+                category: {type: string}
+                patient_id: {type: string}
+                importance: {type: number}
+                confidence: {type: number}
+                privacy_level: {type: string, default: "SENSITIVE"}
+      responses:
+        '201':
+          description: Created memory record
+
+  /api/memories/{id}:
+    get:
+      summary: Get Memory by UUID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Memory record with provenance
+        '404':
+          description: Record not found
+    delete:
+      summary: Delete or Archive Memory Point
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Archival status
+
+  /api/search:
+    post:
+      summary: Hybrid Semantic Search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: {type: string}
+                limit: {type: integer, default: 10}
+                mode: {type: string, enum: [AUTO, EDGE, CLOUD, HYBRID], default: AUTO}
+                patient_id: {type: string}
+      responses:
+        '200':
+          description: Ranked search results with score attribution
+
+  /api/graph:
+    get:
+      summary: Cytoscape Graph Data
+      parameters:
+        - name: patient_id
+          in: query
+          schema: {type: string}
+        - name: max_depth
+          in: query
+          schema: {type: integer, default: 2}
+      responses:
+        '200':
+          description: Cytoscape formatted elements JSON
+
+  /api/governance/evaluate/{id}:
+    post:
+      summary: Trigger Memory Governor Evaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Governance score and verdict
+
+  /api/memories/consolidate:
+    post:
+      summary: Trigger Memory Consolidation Pass
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patient_id: {type: string}
+                window_hours: {type: integer, default: 4}
+      responses:
+        '200':
+          description: Consolidation outcome summary
+
+  /api/sync/status:
+    get:
+      summary: Synchronization Queue Status
+      responses:
+        '200':
+          description: Queue depth and server health
+
+  /api/sync:
+    post:
+      summary: Manually Drain Sync Queue
+      responses:
+        '200':
+          description: Replication drain outcome
+        '503':
+          description: Device is offline

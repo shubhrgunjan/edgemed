@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgemed.io/schemas/relation.schema.json",
+  "title": "GraphRelation",
+  "description": "Explicit typed directed relationship edge in the Knowledge Graph",
+  "type": "object",
+  "required": ["id", "source_id", "target_id", "relation_type", "weight"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique edge identifier"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Origin node ID"
+    },
+    "target_id": {
+      "type": "string",
+      "description": "Destination node ID"
+    },
+    "relation_type": {
+      "type": "string",
+      "enum": [
+        "HAS_CONDITION",
+        "TREATED_WITH",
+        "HAS_EVENT",
+        "MENTIONS",
+        "DERIVED_FROM",
+        "CONTRADICTS",
+        "SUPERSEDES"
+      ]
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 1.0
+    },
+    "properties": {
+      "type": "object",
+      "description": "Contextual edge metadata (e.g., dosage, contraindication severity)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

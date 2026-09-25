@@ -1,0 +1,26 @@
+flowchart TD
+    subgraph OBSERVATIONS["Constituent Raw Observations (Same Patient, Sliding 4h Window)"]
+        O1["Observation 1<br/>BP: 142/90 mmHg, T-60m"]
+        O2["Observation 2<br/>BP: 145/92 mmHg, T-45m"]
+        O3["Observation 3<br/>BP: 140/88 mmHg, T-30m"]
+        O4["Observation 4<br/>BP: 144/91 mmHg, T-15m"]
+    end
+
+    O1 --> CLUSTER["Semantic Similarity Check (Cosine Sim >= 0.90)"]
+    O2 --> CLUSTER
+    O3 --> CLUSTER
+    O4 --> CLUSTER
+
+    CLUSTER --> AGG["Confidence Aggregation & Pattern Recognition"]
+    
+    AGG --> CONS["Consolidated Memory Point<br/>'Sustained Stage 1 Systolic Hypertension (Mean: 143/90, n=4)'<br/>Recurrence: 4 | Confidence: 0.99"]
+
+    CONS -.->|"Provenance DAG Links (parent_memory_ids)"| O1
+    CONS -.->|"Provenance DAG Links (parent_memory_ids)"| O2
+    CONS -.->|"Provenance DAG Links (parent_memory_ids)"| O3
+    CONS -.->|"Provenance DAG Links (parent_memory_ids)"| O4
+
+    O1 --> ARCHIVE["Status: CONSOLIDATED_ARCHIVED (Pruned from Primary ANN Search)"]
+    O2 --> ARCHIVE
+    O3 --> ARCHIVE
+    O4 --> ARCHIVE

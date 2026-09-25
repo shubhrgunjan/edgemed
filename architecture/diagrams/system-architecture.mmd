@@ -1,0 +1,24 @@
+flowchart TD
+    QS["QDRANT SERVER<br/>Global Knowledge / Central Index"]
+    MG["MEMORY GOVERNOR<br/>Multi-Factor Retention Scoring"]
+    
+    QS <== "Replication / Snapshot Sync (mTLS)" ==> MG
+    
+    MG -->|"Verdict: LOCAL"| LOC["LOCAL RETENTION<br/>(Pinned to Device)"]
+    MG -->|"Verdict: SYNC_CANDIDATE"| SYN["SYNC QUEUE<br/>(Outbound Replicator)"]
+    MG -->|"Verdict: EXPIRE"| EXP["EXPIRE / ARCHIVE<br/>(Pruned from Working Set)"]
+    
+    SYN --> QS
+    
+    LOC --> QE["Qdrant Edge (In-Process)<br/>Mutable Shard & Immutable Shard"]
+    
+    QE --> VM["Vector Memory<br/>Dense Cosine + Sparse BM25"]
+    LOC --> GM["Knowledge Graph<br/>Explicit Entity-Relation Edges"]
+    LOC --> TM["Temporal Memory<br/>Longitudinal Event Progressions"]
+    
+    VM --> CF["Context Fusion Engine<br/>Reciprocal Rank Fusion (RRF)"]
+    GM --> CF
+    TM --> CF
+    
+    CF --> LA["Query Router / Intelligence Layer"]
+    LA --> UI["Operator UI / Memory Laboratory"]

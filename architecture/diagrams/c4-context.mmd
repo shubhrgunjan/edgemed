@@ -1,0 +1,14 @@
+flowchart TB
+    CLINICIAN["Clinician / Field Operator<br/>[Person]<br/>Triage nurse, emergency doctor, or field medic"]
+    
+    subgraph EDGEMED_SYSTEM["EdgeMed Platform [System Context Boundary]"]
+        EDGEMED["EdgeMed Memory Lab<br/>[Software System]<br/>Autonomous edge-intelligence & tripartite memory platform"]
+    end
+
+    HOSPITAL_CLOUD["Central Hospital Cloud<br/>[External System]<br/>Authoritative medical databases, EHR, and global guidelines"]
+    QDRANT_CLUSTER["Central Qdrant Server Cluster<br/>[External System]<br/>High-capacity vector index and global knowledge repository"]
+
+    CLINICIAN -->|"Inputs observations, runs hybrid queries, reviews conflicts"| EDGEMED
+    EDGEMED -->|"Replicates scrubbed points & pulls differential snapshots (mTLS)"| QDRANT_CLUSTER
+    QDRANT_CLUSTER -->|"Provides global protocol updates"| EDGEMED
+    EDGEMED -.->|"Optional future export of clinical summaries (FHIR)"| HOSPITAL_CLOUD
