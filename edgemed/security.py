@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ from argon2.exceptions import VerificationError
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 PASSWORDS = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
-SERVICE = "org.lex.edgemed.local"
+SERVICE = os.environ.get("EDGEMED_KEYCHAIN_SERVICE", "org.lex.edgemed.local")
 
 
 def canonical(value):
@@ -61,7 +62,8 @@ def private_write(path: Path, data: str):
     fd = __import__("os").open(
         path, __import__("os").O_WRONLY | __import__("os").O_CREAT | __import__("os").O_TRUNC, 0o600
     )
-    with __import__("os").fdopen(fd, "w") as f:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write(data)
 
 

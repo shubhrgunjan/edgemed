@@ -22,6 +22,7 @@ class Store:
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.root, self.key, self.device = root, key, device
         self.lock = threading.RLock()
+        self.generation = 0
         self.db = sqlite.connect(str(root / "memory.db"), check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite.Row
         self.db.execute(f'''PRAGMA key = "x'{key}'"''')
@@ -57,9 +58,14 @@ class Store:
           CREATE INDEX IF NOT EXISTS revisions_memory ON revisions(memory_id);
         """)
         version = self.get_setting("schema", 1)
-        if version != 1:
+        if version not in (1, 2):
             raise RuntimeError("Unsupported database schema")
-        self.set_setting("schema", 1)
+        with self.transaction():
+            columns = {r[1] for r in self.db.execute("PRAGMA table_info(jobs)")}
+            if "generation" not in columns:
+                self.db.execute("ALTER TABLE jobs ADD COLUMN generation INTEGER NOT NULL DEFAULT 0")
+            self.db.execute("CREATE INDEX IF NOT EXISTS memory_scope ON memories(owner,deleted,subject)")
+            self.set_setting("schema", 2)
         self.verify_audit()
 
     @contextmanager
@@ -69,6 +75,7 @@ class Store:
             try:
                 yield
                 self.db.execute("COMMIT")
+                self.generation += 1
             except BaseException:
                 self.db.execute("ROLLBACK")
                 raise
@@ -80,7 +87,10 @@ class Store:
 
     def set_setting(self, key, value):
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO metadata VALUES(?,?)", (key, json.dumps(value)))
+            self.db.execute(
+                "INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value!=excluded.value",
+                (key, json.dumps(value)),
+            )
 
     def event(self, action, memory_id=None):
         last = self.db.execute("SELECT mac FROM events ORDER BY seq DESC LIMIT 1").fetchone()
@@ -133,7 +143,7 @@ class Store:
         self.db.execute("INSERT INTO jobs(revision_id) VALUES(?)", (rid,))
         if deleted:
             self.db.execute(
-                "UPDATE jobs SET state='pending' WHERE revision_id IN (SELECT id FROM revisions WHERE memory_id=?)",
+                "UPDATE jobs SET state='pending',generation=generation+1 WHERE revision_id IN (SELECT id FROM revisions WHERE memory_id=?)",
                 (memory["id"],),
             )
         self.event("deleted" if deleted else "revision_saved", memory["id"])
@@ -341,13 +351,106 @@ class Store:
             return [
                 dict(r)
                 for r in self.db.execute(
-                    "SELECT r.*,m.owner,m.subject,m.category,m.privacy,m.deleted AS memory_deleted FROM jobs j JOIN revisions r ON r.id=j.revision_id JOIN memories m ON m.id=r.memory_id WHERE j.state!='indexed' LIMIT 32"
+                    "SELECT r.*,j.generation,m.owner,m.subject,m.category,m.privacy,m.deleted AS memory_deleted FROM jobs j JOIN revisions r ON r.id=j.revision_id JOIN memories m ON m.id=r.memory_id WHERE j.state!='indexed' LIMIT 32"
                 )
             ]
 
-    def mark_indexed(self, rid):
+    def mark_indexed(self, rid, generation=None):
         with self.lock:
-            self.db.execute("UPDATE jobs SET state='indexed',error=NULL WHERE revision_id=?", (rid,))
+            if generation is None:
+                generation = self.db.execute(
+                    "SELECT generation FROM jobs WHERE revision_id=?", (rid,)
+                ).fetchone()[0]
+            self.generation += 1
+            return (
+                self.db.execute(
+                    "UPDATE jobs SET state='indexed',error=NULL WHERE revision_id=? AND generation=?",
+                    (rid, generation),
+                ).rowcount
+                == 1
+            )
+
+    def job_current(self, job):
+        with self.lock:
+            row = self.db.execute(
+                "SELECT generation,state FROM jobs WHERE revision_id=?", (job["id"],)
+            ).fetchone()
+            return bool(row and row[0] == job["generation"] and row[1] != "indexed")
+
+    def current_records(self, owner="operator", subject=None):
+        """One SQL read of all authorized current heads; no history or silent corpus cap."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT m.*,r.id AS rid,r.content,r.created AS revision_created,j.state AS index_state "
+                "FROM memories m JOIN json_each(m.heads) h "
+                "JOIN revisions r ON r.id=h.value JOIN jobs j ON j.revision_id=r.id "
+                "WHERE m.owner=? AND m.deleted=0 AND (? IS NULL OR m.subject=?) "
+                "ORDER BY m.created DESC,m.id,r.created,r.id",
+                (owner, subject, subject),
+            ).fetchall()
+            records = {}
+            for row in rows:
+                r = dict(row)
+                mid = r["id"]
+                if mid not in records:
+                    r["heads"] = json.loads(r["heads"])
+                    r["conflicting"] = len(r["heads"]) > 1
+                    r["release"] = "ELIGIBLE" if r["fixture"] else "LOCAL_ONLY"
+                    r["active"] = []
+                    records[mid] = r
+                records[mid]["active"].append(
+                    {"id": r["rid"], "content": r["content"], "created": r["revision_created"]}
+                )
+                records[mid]["content"] = r["content"]
+                if r["index_state"] != "indexed":
+                    records[mid]["index_state"] = "pending"
+            return records
+
+    def summaries(self, owner="operator", limit=100, offset=0, conflicts=False):
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT m.*,json_array_length(heads)>1 AS conflicting,"
+                "EXISTS(SELECT 1 FROM json_each(m.heads) h JOIN jobs j ON j.revision_id=h.value "
+                "WHERE j.state!='indexed') AS pending FROM memories m "
+                "WHERE owner=? AND deleted=0 AND (?=0 OR json_array_length(heads)>1) ORDER BY created DESC,id LIMIT ? OFFSET ?",
+                (owner, int(conflicts), limit, offset),
+            ).fetchall()
+            return [
+                {
+                    **dict(r),
+                    "heads": json.loads(r["heads"]),
+                    "conflicting": bool(r["conflicting"]),
+                    "index_state": "pending" if r["pending"] else "indexed",
+                    "release": "ELIGIBLE" if r["fixture"] else "LOCAL_ONLY",
+                }
+                for r in rows
+            ]
+
+    def stats(self, owner):
+        with self.lock:
+            row = self.db.execute(
+                "SELECT count(*) AS total,coalesce(sum(fixture IS NULL),0) AS local_only,"
+                "coalesce(sum(json_array_length(heads)>1),0) AS conflicts,"
+                "coalesce(sum(NOT EXISTS(SELECT 1 FROM json_each(m.heads) h JOIN jobs j "
+                "ON j.revision_id=h.value WHERE j.state!='indexed')),0) AS indexed "
+                "FROM memories m WHERE owner=? AND deleted=0",
+                (owner,),
+            ).fetchone()
+            return dict(row)
+
+    def eligible_results(self, results, owner, subject=None):
+        """Final canonical check; complete deletions cannot be returned from stale projection/cache."""
+        with self.lock:
+            if not results:
+                return []
+            ids = [r["id"] for r in results]
+            rows = self.db.execute(
+                "SELECT id,heads FROM memories WHERE owner=? AND deleted=0 "
+                "AND (? IS NULL OR subject=?) AND id IN (" + ",".join("?" for _ in ids) + ")",
+                [owner, subject, subject, *ids],
+            )
+            allowed = {r[0]: json.loads(r[1]) for r in rows}
+            return [r for r in results if r["id"] in allowed and r["matched_revision_id"] in allowed[r["id"]]]
 
     def outbox(self):
         with self.lock:

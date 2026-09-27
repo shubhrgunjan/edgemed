@@ -7,7 +7,7 @@ from starlette.background import BackgroundTask
 
 from .models import SignedOperation, PullRequest
 from .security import sign, verify
-from .retrieval import TextEmbedding, MODEL
+from .retrieval import local_embedder
 from .store import Store
 from .sync import CentralProjector
 
@@ -19,31 +19,41 @@ def create_gateway(config, secret, cache, projector_factory=CentralProjector):
     @asynccontextmanager
     async def lifespan(app):
         nonlocal projector
-        model = TextEmbedding(MODEL, cache_dir=str(cache), local_files_only=True, threads=2)
+        model = local_embedder(cache)
         projector = projector_factory(store, model, config, secret)
 
-        async def worker():
-            while True:
-                try:
-                    await asyncio.to_thread(projector.drain)
-                except Exception:
-                    store.set_setting("projection_error", "Central index temporarily unavailable")
-                await asyncio.sleep(1)
+        from .workers import repeat, finish
 
-        task = asyncio.create_task(worker())
-        yield
-        task.cancel()
+        stop = asyncio.Event()
+        tasks = [
+            asyncio.create_task(
+                repeat(
+                    stop,
+                    projector.drain,
+                    lambda: store.set_setting("projection_error", "Central index temporarily unavailable"),
+                )
+            )
+        ]
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        projector.close()
-        store.close()
+            yield
+        finally:
+            await finish(stop, tasks)
+            projector.close()
+            store.close()
 
     app = FastAPI(
         title="EdgeMed central gateway", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
     )
     app.state.store = store
+    from .http_boundary import BoundedHTTP
+
+    app.add_middleware(BoundedHTTP)
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid(request, exc):
+        return JSONResponse({"detail": "Invalid synchronization request"}, 422)
 
     def authenticate(device, payload, signature):
         identity = config["devices"].get(device)

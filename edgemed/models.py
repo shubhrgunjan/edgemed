@@ -71,3 +71,21 @@ class PullRequest(Strict):
     cursor: int = Field(ge=0)
     nonce: UUID
     signature: str = Field(max_length=128)
+
+
+class Receipt(Strict):
+    operation_id: UUID
+    accepted: Literal[True]
+    duplicate: bool
+    indexed: bool
+
+
+class Change(Strict):
+    seq: int = Field(ge=1)
+    payload: Export
+
+
+class PullPage(Strict):
+    from_cursor: int = Field(ge=0)
+    nonce: UUID
+    changes: list[Change] = Field(max_length=100)

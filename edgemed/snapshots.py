@@ -114,7 +114,7 @@ def install(store, compressed, envelope, public_key, nonce):
         raise ValueError("Snapshot size mismatch")
     if hashlib.sha256(compressed.read_bytes()).hexdigest() != manifest["sha256"]:
         raise ValueError("Snapshot digest mismatch")
-    prior = store.get_setting("reference_snapshot", {"generation": -1})
+    prior = store.get_setting("reference_snapshot") or {"generation": -1}
     if manifest["generation"] < prior["generation"]:
         raise ValueError("Snapshot rollback rejected")
     if manifest["generation"] > store.get_setting("cursor", 0):

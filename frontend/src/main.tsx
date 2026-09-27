@@ -1,49 +1,182 @@
-import React, { useEffect, useState, type FormEvent } from 'react';
+import React, { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, ArrowDownLeft, ArrowUpRight, Check, ChevronRight, Database, FileText, GitBranch, HardDrive, LockKeyhole, LogOut, Network, Plus, RefreshCw, Search, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, ArrowUpRight, Check, ChevronRight, FileText, GitBranch, HardDrive, LockKeyhole, LogOut, Plus, RefreshCw, Search, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import './style.css';
 
-type Revision = {id:string;content:string;created:number;parents:string[];variant:number;device:string};
-type Memory = {id:string;title:string;content:string;subject:string|null;category:string;privacy:string;release:string;reason:string;heads:string[];revisions:Revision[];fixture:string|null;conflicting:boolean;index_state:string;created:number;semantic_score?:number;keyword_score?:number};
-type Status = {device:string;total:number;local_only:number;conflicts:number;indexed:number;engine:string;database:string;vault:boolean;worker_error:string|null};
-type Sync = {enabled:boolean;error:string|null;last_sync?:number;items:{id:string;state:string;attempts:number;error:string|null;payload:unknown}[]};
-let csrf = '';
-async function api(path:string, method='GET', data?:unknown) {
-  const res = await fetch('/api'+path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data)});
-  const body = await res.json();
-  if(!res.ok) { if(res.status===401 && path!='/login') window.dispatchEvent(new Event('session-expired')); throw new Error(typeof body.detail==='string'?body.detail:'Please check the submitted fields.'); }
-  return body;
+type Revision = { id: string; content: string; created: number; parents: string[]; variant: number; device: string };
+type Memory = { id: string; title: string; content?: string; subject: string | null; category: string; privacy: string; release: string; heads: string[]; revisions?: Revision[]; fixture: string | null; conflicting: boolean; index_state: string; created: number; matched_revision_id?: string; reason?: string };
+type Status = { generation: number; device: string; total: number; local_only: number; conflicts: number; indexed: number; vault: boolean; worker_error: string | null };
+type Sync = { enabled: boolean; connection: string; error: string | null; last_sync?: number; counts: Record<string, number>; items: { id: string; state: string; attempts: number; error: string | null }[] };
+type Event = { action: string; time: number; device: string };
+let csrf = '', epoch = 0;
+const requests = new Set<AbortController>();
+function invalidate() { epoch++; csrf = ''; requests.forEach(c => c.abort()); requests.clear(); }
+async function api(path: string, method = 'GET', data?: unknown) {
+  const generation = epoch, controller = new AbortController(); requests.add(controller);
+  try {
+    const res = await fetch('/api' + path, { method, credentials: 'same-origin', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
+    const body = await res.json();
+    if (generation !== epoch) throw new DOMException('Previous session', 'AbortError');
+    if (!res.ok) {
+      if (res.status === 401 && path !== '/login') window.dispatchEvent(new CustomEvent('session-expired'));
+      throw new Error(typeof body.detail === 'string' ? body.detail : 'Check the submitted fields.');
+    }
+    return body;
+  } finally { requests.delete(controller); }
 }
-const date = (t:number) => new Date(t*1000).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+const date = (t?: number) => t ? new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not yet';
+const connectionLabels: Record<string, string> = { connected: 'Shared service connected', unavailable: 'Shared service unavailable', paused: 'Sharing paused', unknown: 'Checking shared service', stale: 'Shared status out of date', attention: 'Sharing needs attention', verification_error: 'Sharing verification failed' };
 
-function App(){
-  const [user,setUser]=useState(''),[checking,setChecking]=useState(true),[error,setError]=useState('');
-  const [view,setView]=useState('Memory explorer'),[memories,setMemories]=useState<Memory[]>([]),[status,setStatus]=useState<Status|null>(null),[sync,setSync]=useState<Sync|null>(null);
-  const [selected,setSelected]=useState<Memory|null>(null),[query,setQuery]=useState(''),[results,setResults]=useState<Memory[]|null>(null),[timing,setTiming]=useState<number|null>(null),[filter,setFilter]=useState('All memory'),[adding,setAdding]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
-  const [events,setEvents]=useState<{action:string;time:number;device:string}[]>([]);
-  async function refresh(){const [m,s,y,a]=await Promise.all([api('/memories'),api('/status'),api('/sync/status'),api('/activity')]);setMemories(m);setStatus(s);setSync(y);setEvents(a);setSelected(old=>old?m.find((r:Memory)=>r.id===old.id)||null:null);}
-  useEffect(()=>{api('/session').then(s=>{csrf=s.csrf;setUser(s.username)}).catch(()=>{}).finally(()=>setChecking(false)); const expired=()=>{setUser('');setMemories([]);setResults(null);setSelected(null);setStatus(null);setSync(null);setEvents([]);csrf=''};window.addEventListener('session-expired',expired);return()=>window.removeEventListener('session-expired',expired)},[]);
-  useEffect(()=>{if(!user)return;refresh().catch(e=>setError(e.message));const t=setInterval(()=>refresh().catch(e=>setError(e.message)),3000);return()=>clearInterval(t)},[user]);
-  async function action(fn:()=>Promise<unknown>, message=''){setBusy(true);setError('');try{await fn();await refresh();setResults(null);if(message)setNotice(message)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  async function login(e:FormEvent<HTMLFormElement>){e.preventDefault();const d=new FormData(e.currentTarget);setBusy(true);setError('');try{const s=await api('/login','POST',{username:d.get('username'),password:d.get('password')});csrf=s.csrf;setUser(s.username)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  async function search(e:FormEvent){e.preventDefault();if(!query.trim()){setResults(null);return}setBusy(true);try{const r=await api('/search','POST',{query,mode:'hybrid'});setResults(r.results);setTiming(r.elapsed_ms)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  async function create(e:FormEvent<HTMLFormElement>){e.preventDefault();const d=new FormData(e.currentTarget);await action(async()=>{await api('/memories','POST',{title:d.get('title'),content:d.get('content'),subject:d.get('subject'),category:d.get('category'),privacy:d.get('privacy')});setAdding(false)},'Observation saved locally. Search indexing follows automatically.');}
-  const shown=(results??memories).filter(m=>filter==='All memory'||(filter==='Local only'&&!m.fixture)||(filter==='Shared references'&&m.fixture)||(filter==='Needs review'&&m.conflicting));
-  if(checking)return <div className="loading">Opening local workspace…</div>;
-  if(!user)return <div className="login-page"><div className="login-brand"><div className="brand-symbol"><GitBranch size={26}/></div><span>EdgeMed<span className="brand-dot">.</span></span></div><div className="login-copy"><div className="eyebrow">MEMORY THAT STAYS WITH YOU</div><h1>Intelligence here.<br/>Your data, here.</h1><p>An offline workspace for synthetic clinical memory.<br/>Search, inspect, and share only what is approved.</p><div className="login-features"><span><HardDrive size={17}/> Real Qdrant Edge</span><span><ShieldCheck size={17}/> Encrypted local vault</span></div></div><form className="login-card" onSubmit={login}><LockKeyhole size={25}/><h2>Unlock your workspace</h2><p>Your credentials are stored in macOS Keychain.</p><label>Username<input name="username" defaultValue="operator" autoComplete="username" required/></label><label>Password<input name="password" type="password" autoComplete="current-password" required/></label>{error&&<div role="alert" className="error">{error}</div>}<button className="primary" disabled={busy}>{busy?'Signing in…':'Sign in locally'} <ArrowUpRight size={17}/></button><div className="help">Retrieve your generated password:<code>.venv/bin/python -m edgemed.cli credentials edge-a</code><small>Use edge-b for the second device.</small></div></form><footer>Synthetic data only · Local research prototype</footer></div>;
-  return <div className="shell"><aside className="sidebar"><div className="brand"><div className="brand-symbol"><GitBranch size={22}/></div>EdgeMed<span className="brand-dot">.</span></div><div className="workspace"><span className="device-avatar">LX</span><div><b>LEX workspace</b><small>Local memory lab</small></div><span className="tiny-dot"/></div><div className="nav-label">WORKSPACE</div><nav>{[[Database,'Memory explorer'],[Network,'Knowledge graph'],[RefreshCw,'Synchronization'],[Activity,'Activity & timeline']].map(([Icon,label])=>{const I=Icon as typeof Database;return <button key={label as string} className={view===label?'nav active':'nav'} onClick={()=>{setView(label as string);setSelected(null)}}><I size={18}/>{label as string}{label==='Memory explorer'&&<span className="nav-count">{status?.total??0}</span>}</button>})}</nav><div className="sidebar-bottom"><div className="protection"><ShieldCheck size={20}/><div><b>Local by default</b><p>Private observations stay<br/>on this device.</p></div></div><button className="nav" onClick={async()=>{try{await api('/logout','POST');setError('');setNotice('');window.dispatchEvent(new Event('session-expired'))}catch(e){setError((e as Error).message)}}}><LogOut size={17}/>Sign out</button><div className="version">LEX / PS03 <span>v0.1.0</span></div></div></aside>
-    <main><header className="topbar"><span>Workspace <ChevronRight size={14}/> <b>{view}</b></span><div className="topbar-right"><span className="synthetic">SYNTHETIC DATA</span><span className="device-chip"><span className="tiny-dot"/>{status?.device??'edge'}</span></div></header><div className="page"><div className="page-heading"><div><div className="eyebrow">ON-DEVICE INTELLIGENCE</div><h1>{view}</h1><p>{view==='Memory explorer'?'A clear view of what your device remembers.':view==='Synchronization'?'Every shared operation, with a reason and a receipt.':view==='Knowledge graph'?'Explore the connections behind your observations.':'Follow the history of your local workspace.'}</p></div><button className="primary" onClick={()=>setAdding(true)}><Plus size={17}/>New observation</button></div>
-    {error&&<div role="alert" className="error banner">{error}<button aria-label="Dismiss error" onClick={()=>setError('')}><X size={16}/></button></div>}{notice&&<div className="notice banner"><Check size={16}/>{notice}<button aria-label="Dismiss notice" onClick={()=>setNotice('')}><X size={16}/></button></div>}
-    <div className="stats"><Stat label="TOTAL MEMORIES" value={status?.total??0} icon={<Database size={18}/>} note={`${status?.indexed??0} indexed for local search`}/><Stat label="KEPT ON DEVICE" value={status?.local_only??0} icon={<LockKeyhole size={18}/>} note="Private by policy"/><Stat label="SYNC QUEUE" value={sync?.items.filter(x=>!['acknowledged','cancelled'].includes(x.state)).length??0} icon={<RefreshCw size={18}/>} note={sync?.enabled?'Transport enabled':'Transport paused'}/><Stat label="NEEDS REVIEW" value={status?.conflicts??0} icon={<GitBranch size={18}/>} note="Conflicting observations"/></div>
-    <div className="security-strip"><ShieldCheck size={19}/><span><b>{status?.vault?'Encrypted vault active':'Synthetic test workspace'}</b> · SQLCipher records + protected vector storage</span><span className="local-route"><HardDrive size={14}/> LOCAL SEARCH</span></div>
-    {view==='Memory explorer'&&<><div className="toolbar"><form className="search" onSubmit={search}><Search size={18}/><input aria-label="Search memory" placeholder="Search by meaning, symptom, or exact term…" value={query} onChange={e=>setQuery(e.target.value)}/><button disabled={busy}>Search</button></form><button className="secondary" disabled={busy} onClick={()=>action(()=>api('/demo/seed','POST'),'Synthetic examples are ready to explore.')}><Plus size={16}/>Load examples</button></div><div className="tabs">{['All memory','Local only','Shared references','Needs review'].map(t=><button className={filter===t?'selected':''} key={t} onClick={()=>setFilter(t)}>{t}</button>)}<span>{results?`${timing} ms · hybrid · local`:`${shown.length} records`}</span>{results&&<button onClick={()=>{setResults(null);setQuery('')}}>Clear search</button>}</div><div className="memory-table"><div className="table-head"><span>MEMORY / SOURCE</span><span>PRIVACY</span><span>STATE</span><span>CAPTURED</span><span/></div>{shown.map(m=><button className="memory-row" key={m.id} onClick={()=>setSelected(m)}><span className="memory-name"><span className={'record-icon '+(m.fixture?'reference':'')}><FileText size={19}/></span><span><b>{m.title}</b><small>{m.subject??'Reviewed reference'} <i>·</i> {m.category.toLowerCase().replace('_',' ')}</small></span></span><span><span className={'badge '+(m.fixture?'teal':'neutral')}>{m.fixture?<ArrowUpRight size={12}/>:<LockKeyhole size={11}/>} {m.fixture?'Approved reference':'Local only'}</span></span><span className={m.conflicting?'conflict':'state'}><span className="tiny-dot"/>{m.conflicting?'Needs review':m.index_state==='indexed'?'Searchable':'Indexing'}</span><span className="date">{date(m.created)}</span><ChevronRight size={15}/></button>)}{shown.length===0&&<div className="empty"><Database size={34}/><h3>{results?'No matching memories':'A fresh start for local memory'}</h3><p>{results?'Try a broader phrase or load synthetic examples.':'Add an observation or load the synthetic examples to begin.'}</p></div>}</div><div className="table-footer"><span><LockKeyhole size={13}/> Patient observations are never added to the outbound queue.</span><span>Qdrant Edge · {status?.database}</span></div></>}
-    {view==='Synchronization'&&<section className="panel"><div className="panel-heading"><div><h2>{sync?.enabled?'Transport enabled':'Transport paused'}</h2><p>Only approved synthetic reference versions can be shared.</p></div><button className="secondary" disabled={busy} onClick={()=>action(()=>api('/sync/transport','POST',{enabled:!sync?.enabled}))}>{sync?.enabled?<WifiOff size={16}/>:<Wifi size={16}/>} {sync?.enabled?'Pause transport':'Enable transport'}</button><button className="primary" disabled={busy||!sync?.enabled} onClick={()=>action(()=>api('/sync','POST'))}><RefreshCw size={16}/>Sync now</button><button className="secondary" disabled={busy||!sync?.enabled} onClick={()=>action(()=>api('/sync/reference-snapshot','POST'),'Signed reference cache verified and loaded.')}>Refresh reference cache</button></div>{sync?.error&&<p className="error">{sync.error}</p>}{sync?.items.length?sync.items.map(item=><details className="sync-item" key={item.id}><summary><span><ArrowUpRight size={16}/> Approved reference operation</span><span className={'badge '+(item.state==='acknowledged'?'teal':'neutral')}>{item.state}</span></summary><p>{item.attempts} attempts · {item.error??'Private note content and embeddings are excluded.'}</p><pre>{JSON.stringify(item.payload,null,2)}</pre></details>):<div className="empty"><RefreshCw size={30}/><h3>Nothing waiting to leave</h3><p>Load synthetic reference examples to demonstrate selective sync.</p></div>}</section>}
-    {view==='Knowledge graph'&&<section className="panel"><div className="panel-heading"><div><h2>Connected memory</h2><p>Explicit subject links, supported by your saved observations.</p></div><span className="badge neutral">Scoped to this operator</span></div><div className="graph-grid">{Array.from(new Set(memories.map(m=>m.subject??'Shared references'))).map(subject=><div className="graph-group" key={subject}><div className="subject-node"><Network size={20}/>{subject}</div><div className="graph-children">{memories.filter(m=>(m.subject??'Shared references')===subject).map(m=><button onClick={()=>setSelected(m)} key={m.id}><span className="line"/><FileText size={15}/><span>{m.title}<small>{m.category.toLowerCase()}</small></span></button>)}</div></div>)}</div>{!memories.length&&<div className="empty">Load examples to explore their relationships.</div>}</section>}
-    {view==='Activity & timeline'&&<section className="panel"><div className="panel-heading"><div><h2>Local activity</h2><p>Authenticated event chain. Sensitive note text is excluded.</p></div><span className="badge teal"><ShieldCheck size={13}/>HMAC verified at startup</span></div><div className="timeline">{events.map((e,i)=><div key={i}><span className="timeline-dot"/><b>{e.action.replaceAll('_',' ')}</b><span>{e.device}</span><time>{date(e.time)}</time></div>)}</div></section>}
-    <footer className="page-footer"><span>Built for disconnected moments.</span><span>Research prototype · Synthetic data only</span></footer></div></main>
-    {selected&&<div className="overlay" onClick={()=>setSelected(null)}><aside className="inspector" onClick={e=>e.stopPropagation()}><div className="inspector-top"><span className="eyebrow">MEMORY INSPECTOR</span><button aria-label="Close inspector" onClick={()=>setSelected(null)}><X/></button></div><span className={'badge '+(selected.fixture?'teal':'neutral')}>{selected.privacy}</span><h2>{selected.title}</h2><p className="muted">{selected.subject??'Reviewed synthetic reference'} · {selected.category}</p><div className="note-content">{selected.content}</div><div className="policy-box"><ShieldCheck size={19}/><div><b>{selected.fixture?'Eligible for selective sharing':'Kept on this device'}</b><p>{selected.reason}</p></div></div><h3>Revision history</h3>{selected.revisions.map(r=><div className="revision" key={r.id}><div><GitBranch size={14}/><b>{selected.heads.includes(r.id)?'Current branch':'Previous revision'}</b><small>{date(r.created)}</small></div><p>{r.content}</p><small>{r.device} · {r.id.slice(0,8)}</small>{selected.conflicting&&selected.heads.includes(r.id)&&<button className="secondary" disabled={busy} onClick={()=>action(()=>api(`/memories/${selected.id}/resolve`,'POST',{parents:selected.heads,chosen:r.id}),'Conflict resolved with a new revision.')}>Resolve using this branch</button>}</div>)}{selected.fixture?<div className="variant-controls"><h3>Reference revision demo</h3><p className="muted">Select a reviewed variant. Concurrent device edits are preserved for review.</p>{[1,2].map(v=><button className="secondary" key={v} disabled={busy} onClick={()=>action(()=>api(`/memories/${selected.id}/reference-variant`,'POST',{parent:selected.heads[0],variant:v}),`Reference variant ${v} saved.`)}>Save variant {v}</button>)}</div>:<form onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action(()=>api(`/memories/${selected.id}/revisions`,'POST',{parent:selected.heads[0],content:d.get('content')}),'New local revision saved.')}}><label>Add a corrected observation<textarea name="content" required maxLength={12000} placeholder="The original remains in revision history."/></label><button className="secondary" disabled={busy}>Save revision</button></form>}<details className="danger-zone"><summary>Archive / deletion</summary><p>Remove this memory from search and queue a tombstone for a shared reference. Protected history remains in the local audit store.</p><button className="danger" disabled={busy} onClick={()=>action(async()=>{await api(`/memories/${selected.id}`,'DELETE');setSelected(null)},'Memory removed from active search.')}>Remove from active memory</button></details></aside></div>}
-    {adding&&<div className="overlay" onClick={()=>setAdding(false)}><form className="modal" onClick={e=>e.stopPropagation()} onSubmit={create}><div className="inspector-top"><span className="eyebrow">NEW LOCAL MEMORY</span><button type="button" aria-label="Close form" onClick={()=>setAdding(false)}><X/></button></div><h2>Capture an observation</h2><p className="muted">Use synthetic data. This record stays on your device.</p><label>Title<input name="title" required maxLength={160} placeholder="A short description"/></label><div className="form-row"><label>Synthetic subject<input name="subject" defaultValue="SYN-001" pattern="SYN-[0-9]{3,6}" required/></label><label>Category<select name="category">{['OBSERVATION','ALLERGY','MEDICATION','VITAL_SIGN','NOTE'].map(c=><option key={c}>{c}</option>)}</select></label></div><label>Observation<textarea name="content" required maxLength={12000} rows={5} placeholder="Record what was observed, with source and context."/></label><label>Privacy<select name="privacy"><option value="SENSITIVE">Sensitive · local only</option><option value="HIGHLY_SENSITIVE">Highly sensitive · hard-pinned local</option></select></label><div className="modal-bottom"><span><LockKeyhole size={14}/>Encrypted on save</span><button className="primary" disabled={busy}>{busy?'Saving…':'Save locally'}<ArrowDownLeft size={16}/></button></div></form></div>}
+function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement;
+    const root = ref.current!;
+    const controls = () => Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]),input,textarea,select,[tabindex="0"]'));
+    controls()[0]?.focus();
+    function key(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+      if (e.key === 'Tab') {
+        const nodes = controls(), first = nodes[0], last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
+    }
+    root.addEventListener('keydown', key);
+    return () => { root.removeEventListener('keydown', key); previous?.focus(); };
+  }, []);
+  return <div className="overlay"><div ref={ref} className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="dialog-heading"><h2>{title}</h2><button className="icon" aria-label={`Close ${title}`} onClick={onClose}><X /></button></div>{children}</div></div>;
+}
+
+function App() {
+  const [user, setUser] = useState(''), [checking, setChecking] = useState(true);
+  const [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false);
+  const [view, setView] = useState('Memory'), [query, setQuery] = useState(''), [offset, setOffset] = useState(0);
+  const [memories, setMemories] = useState<Memory[]>([]), [results, setResults] = useState<Memory[] | null>(null);
+  const [status, setStatus] = useState<Status | null>(null), [sync, setSync] = useState<Sync | null>(null), [ready, setReady] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]), [selected, setSelected] = useState<Memory | null>(null);
+  const [adding, setAdding] = useState(false), [chosen, setChosen] = useState(''), [matched, setMatched] = useState('');
+  const [timing, setTiming] = useState<{ backend: number; roundtrip: number } | null>(null);
+  const selectedId = useRef<string | null>(null), searchOrder = useRef(0), generation = useRef(-1);
+  function clear() {
+    invalidate(); searchOrder.current++; selectedId.current = null; generation.current = -1;
+    setUser(''); setMemories([]); setResults(null); setSelected(null); setStatus(null); setSync(null); setEvents([]);
+    setQuery(''); setAdding(false); setChosen(''); setMatched(''); setTiming(null); setNotice(''); setError(''); setBusy(false); setView('Memory'); setOffset(0); setReady(false);
+  }
+  const ignoreAbort = (e: Error) => { if (e.name !== 'AbortError') setError(e.message); };
+  async function poll() {
+    const [s, y] = await Promise.all([api('/status'), api('/sync/status')]); setStatus(s); setSync(y); setReady(true);
+    if (generation.current !== s.generation) {
+      generation.current = s.generation;
+      if (view !== 'Sharing & activity') await list();
+      if (selectedId.current) {
+        const id = selectedId.current;
+        try { const detail = await api(`/memories/${id}`); if (selectedId.current === id) setSelected(detail); }
+        catch (e) { if ((e as Error).message === 'Record not found') closeInspector(); else throw e; }
+      }
+    }
+  }
+  async function list() { setMemories(await api(`/memories?limit=100&offset=${offset}&conflicts=${view === 'Needs review'}`)); }
+  async function inspect(m: Memory) {
+    selectedId.current = m.id; setMatched(m.matched_revision_id ?? ''); setChosen('');
+    const detail = await api(`/memories/${m.id}`);
+    if (selectedId.current === m.id) setSelected(detail);
+  }
+  function closeInspector() { selectedId.current = null; setSelected(null); setChosen(''); }
+  async function action(fn: () => Promise<unknown>, message: string) {
+    if (busy) return;
+    const current = epoch;
+    setBusy(true); setError('');
+    try {
+      await fn(); if (current !== epoch) return;
+      await Promise.all([poll(), list()]); setResults(null); setNotice(message);
+      if (selectedId.current) {
+        const detail = await api(`/memories/${selectedId.current}`); setSelected(detail); setChosen('');
+      }
+    } catch (e) { if (current === epoch) ignoreAbort(e as Error); }
+    finally { if (current === epoch) setBusy(false); }
+  }
+  useEffect(() => {
+    api('/session').then(s => { csrf = s.csrf; setUser(s.username); }).catch(() => {}).finally(() => setChecking(false));
+    const expired = () => { clear(); setError('Your session ended. Sign in again.'); };
+    window.addEventListener('session-expired', expired);
+    return () => window.removeEventListener('session-expired', expired);
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    async function tick() {
+      try { if (!document.hidden) await poll(); }
+      catch (e) { if ((e as Error).name !== 'AbortError' && !stopped) setReady(false); }
+      if (!stopped) timer = setTimeout(tick, document.hidden ? 15000 : 5000);
+    }
+    tick();
+    let lastActivity = 0;
+    const activity = (e: globalThis.Event) => {
+      if (e.isTrusted && Date.now() - lastActivity > 30000) { lastActivity = Date.now(); api('/session/activity', 'POST').catch(() => {}); }
+    };
+    window.addEventListener('pointerdown', activity); window.addEventListener('keydown', activity);
+    return () => { stopped = true; clearTimeout(timer); window.removeEventListener('pointerdown', activity); window.removeEventListener('keydown', activity); };
+  }, [user, view, offset]);
+  useEffect(() => {
+    if (!user) return;
+    if (view === 'Sharing & activity') api('/activity').then(setEvents).catch(ignoreAbort);
+    else list().catch(ignoreAbort);
+  }, [user, view, offset]);
+  async function login(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const d = new FormData(e.currentTarget); setBusy(true); setError('');
+    try { const s = await api('/login', 'POST', { username: d.get('username'), password: d.get('password') }); csrf = s.csrf; setUser(s.username); }
+    catch (e) { ignoreAbort(e as Error); } finally { setBusy(false); }
+  }
+  async function logout() {
+    // This revocation request survives cancellation of data requests.
+    const token = csrf;
+    clear();
+    try {
+      const response = await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': token } });
+      if (!response.ok && response.status !== 401) throw new Error();
+    } catch { setError('Workspace hidden. Server sign-out could not be confirmed; close the local app to fully lock it.'); }
+  }
+  async function search(e: FormEvent) {
+    e.preventDefault(); const order = ++searchOrder.current;
+    if (!query.trim()) { setResults(null); return; }
+    setBusy(true); setError(''); const start = performance.now();
+    try {
+      const r = await api('/search', 'POST', { query, mode: 'hybrid' });
+      if (order === searchOrder.current) { setResults(r.results); setTiming({ backend: r.elapsed_ms, roundtrip: performance.now() - start }); }
+    } catch (e) { ignoreAbort(e as Error); } finally { if (order === searchOrder.current) setBusy(false); }
+  }
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const d = new FormData(e.currentTarget);
+    await action(async () => { await api('/memories', 'POST', Object.fromEntries(d)); setAdding(false); }, 'Saved on this device. Semantic indexing follows automatically.');
+  }
+  if (checking) return <div className="loading">Opening local workspace…</div>;
+  if (!user) return <main className="login"><div className="login-intro"><div className="brand"><GitBranch /> EdgeMed<span>.</span></div><p className="eyebrow">MEMORY THAT STAYS WITH YOU</p><h1>Keep working.<br />Even offline.</h1><p>Capture observations and search what this device remembers.</p><div className="pills"><span><HardDrive size={16} /> Local search</span><span><ShieldCheck size={16} /> Protected storage</span></div></div>
+    <form className="login-card" onSubmit={login}><LockKeyhole /><h2>Unlock your workspace</h2><p>Use your locally provisioned account.</p><label>Username<input name="username" defaultValue="operator" autoComplete="username" required /></label><label>Password<input name="password" type="password" autoComplete="current-password" required /></label>{error && <p role="alert" className="error">{error}</p>}<button className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in locally'} <ArrowUpRight size={16} /></button><small>Five minutes of inactivity hides the workspace. Full vault lock is a separate local operation.</small></form><footer>Synthetic data only · Informational research prototype</footer></main>;
+  const pending = (sync?.counts?.pending ?? 0) + (sync?.counts?.retry_wait ?? 0);
+  const shown = results ?? memories;
+  return <div className="shell"><aside className="sidebar"><div className="brand"><GitBranch />EdgeMed<span>.</span></div><div className="workspace"><b>{status?.device ?? 'Local device'}</b><small>Synthetic memory workspace</small></div><nav>{['Memory', 'Needs review', 'Sharing & activity'].map(v => <button className={view === v ? 'active' : ''} key={v} onClick={() => { setView(v); setOffset(0); setResults(null); closeInspector(); }}>{v === 'Memory' ? <FileText size={18} /> : v === 'Needs review' ? <GitBranch size={18} /> : <RefreshCw size={18} />}{v}{v === 'Needs review' && !!status?.conflicts && <span className="count">{status.conflicts}</span>}</button>)}</nav><div className="sidebar-bottom"><p><LockKeyhole size={16} /> Private observations stay here.</p><button onClick={logout}><LogOut size={17} />Sign out</button><small>Sign-out hides records; the local vault remains mounted.</small></div></aside>
+    <main className="main"><header className="topbar"><span>{status?.device ?? 'Device'} <ChevronRight size={15} /> {view}</span><span className="synthetic">SYNTHETIC DATA</span></header><div className="page"><div className="page-heading"><div><p className="eyebrow">YOUR LOCAL WORKSPACE</p><h1>{view === 'Memory' ? 'Memory explorer' : view}</h1><p>{view === 'Memory' ? 'Capture an observation. Find it when you need it.' : view === 'Needs review' ? 'Compare every current branch before choosing a resolution.' : 'See what is waiting, what was accepted, and what happened.'}</p></div><button className="primary" onClick={() => setAdding(true)}><Plus size={18} />Add observation</button></div>
+      <div className="status-row" role="status"><span className={ready ? 'good' : 'warn'}><HardDrive size={16} />{ready ? 'Local workspace ready' : 'Local service unavailable — saving cannot be confirmed'}</span><span>{sync?.connection === 'connected' ? <Wifi size={16} /> : <WifiOff size={16} />}{connectionLabels[sync?.connection ?? 'unknown']}</span><button onClick={() => setView('Sharing & activity')}>{pending} approved updates pending</button><button onClick={() => setView('Needs review')}>{status?.conflicts ?? 0} conflicts</button></div>
+      {error && <div className="error banner" role="alert">{error}<button className="icon" aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{notice && <div className="notice banner" role="status"><Check size={16} />{notice}<button className="icon" aria-label="Dismiss notice" onClick={() => setNotice('')}><X size={16} /></button></div>}{status?.worker_error && <div className="error banner">{status.worker_error}</div>}
+      {view !== 'Sharing & activity' ? <><div className="toolbar"><form className="search" onSubmit={search}><Search size={18} /><input aria-label="Search memory" placeholder="Search local memory by meaning or exact words…" value={query} onChange={e => setQuery(e.target.value)} /><button disabled={busy}>Search</button></form><button className="secondary" disabled={busy} onClick={() => action(() => api('/demo/seed', 'POST'), 'Synthetic examples are ready.')}>Load examples</button></div>
+        <div className="list-heading"><span>{results ? `${shown.length} local results` : `${status?.total ?? 0} saved · ${status?.indexed ?? 0} searchable`}</span>{results && <><small>{timing?.backend} ms backend · {timing?.roundtrip.toFixed(1)} ms round trip</small><button onClick={() => { setResults(null); setQuery(''); }}>Clear search</button></>}</div>
+        <div className="memory-table">{shown.map(m => <button className="memory-row" key={m.id} onClick={() => inspect(m).catch(ignoreAbort)}><span className="record-icon"><FileText size={20} /></span><span className="memory-name"><b>{m.title}</b><small>{m.subject ?? 'Reviewed shared reference'} · {m.category.toLowerCase().replaceAll('_', ' ')}</small>{m.content && <span className="excerpt">{m.content}</span>}</span><span className={'badge ' + (m.fixture ? 'teal' : '')}>{m.fixture ? 'Approved reference' : 'Local only'}</span><span className={m.conflicting ? 'warn' : 'state'}>{m.conflicting ? 'Needs review' : m.index_state === 'indexed' ? 'Searchable' : 'Indexing'}</span><ChevronRight size={16} /></button>)}{shown.length === 0 && <div className="empty"><FileText /><h3>{view === 'Needs review' ? 'No conflicts on this page' : results ? 'No matching memories' : 'Start with an observation'}</h3><p>Local records remain available when the shared service is disconnected.</p></div>}</div>
+        {!results && <div className="pagination"><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 100))}>Previous</button><span>Page {offset / 100 + 1}</span><button disabled={memories.length < 100} onClick={() => setOffset(offset + 100)}>Next</button></div>}</> : <>
+          <section className="panel"><div className="panel-heading"><div><h2>{connectionLabels[sync?.connection ?? 'unknown']}</h2><p>Only reviewed synthetic reference variants can leave this device.</p><small>Last verified contact: {date(sync?.last_sync)}</small></div><div className="actions"><button className="secondary" disabled={busy} onClick={() => action(() => api('/sync/transport', 'POST', { enabled: !sync?.enabled }), sync?.enabled ? 'Sharing paused. Local work continues.' : 'Sharing enabled; checking the shared service.')}>{sync?.enabled ? 'Pause sharing' : 'Enable sharing'}</button><button className="primary" disabled={busy || !sync?.enabled} onClick={() => action(() => api('/sync', 'POST'), 'Sharing attempt finished. Check the status below.')}>Sync now</button></div></div>
+            {sync?.error && <p className="error">{sync.error}</p>}<div className="queue-summary"><b>{pending} waiting / retrying</b><span>{sync?.counts?.failed ?? 0} need attention</span><span>{sync?.counts?.acknowledged ?? 0} accepted centrally</span></div><p className="muted">Central acceptance does not confirm receipt on another device. Check Device B to demonstrate delivery.</p>
+            {sync?.items.length ? sync.items.slice(-40).reverse().map(item => <div className="queue-item" key={item.id}><span>Approved reference update<small>{item.attempts} attempts{item.error ? ` · ${item.error}` : ''}</small></span><span className="badge">{item.state === 'acknowledged' ? 'Accepted centrally' : item.state.replaceAll('_', ' ')}</span></div>) : <div className="empty">No approved updates waiting. Private observations never enter this queue.</div>}
+            <details><summary>Reference cache and diagnostics</summary><p>Search always runs locally. A signed reference-cache refresh is optional.</p><button className="secondary" disabled={busy || !sync?.enabled} onClick={() => action(() => api('/sync/reference-snapshot', 'POST'), 'Signed reference cache verified and activated.')}>Refresh reference cache</button><p>Encrypted vault: {status?.vault ? 'Verified at startup' : 'Test environment'} · SQLCipher + Qdrant Edge</p></details>
+          </section><section className="panel"><h2><Activity size={20} /> Activity history</h2><button className="secondary" onClick={() => api('/activity').then(setEvents).catch(ignoreAbort)}>Refresh activity</button><div className="timeline">{events.map((e, i) => <div key={i}><b>{e.action.replaceAll('_', ' ')}</b><span>{e.device}</span><time>{date(e.time)}</time></div>)}</div><small>Metadata-only audit events. Chaining is verified at startup; it does not prove protection against whole-store rollback.</small></section></>}
+      <footer>Local memory · Explicit sharing · Human review</footer></div></main>
+    {adding && <Dialog title="Add observation" onClose={() => setAdding(false)}><form onSubmit={create}><p>This synthetic observation stays on this device.</p><label>Title<input name="title" required maxLength={160} /></label><label>Synthetic subject<input name="subject" defaultValue="SYN-001" pattern="SYN-[0-9]{3,6}" required /></label><label>Observation<textarea name="content" required maxLength={12000} rows={5} /></label><div className="form-row"><label>Category<select name="category">{['OBSERVATION', 'ALLERGY', 'MEDICATION', 'VITAL_SIGN', 'NOTE'].map(c => <option key={c}>{c}</option>)}</select></label><label>Privacy<select name="privacy"><option value="SENSITIVE">Sensitive · local only</option><option value="HIGHLY_SENSITIVE">Highly sensitive · local only</option></select></label></div><button className="primary" disabled={busy}>Save locally</button></form></Dialog>}
+    {selected && <Dialog title="Memory inspector" onClose={closeInspector}><span className="badge">{selected.fixture ? 'Approved synthetic reference' : 'Kept on this device'}</span><h3>{selected.title}</h3><p>{selected.subject ?? 'Reviewed reference'}</p>{selected.conflicting && <p className="warning">Multiple current branches exist. No branch has been silently chosen as the truth.</p>}<div className="note-content">{selected.revisions?.find(r => r.id === matched)?.content ?? selected.content}</div>{matched && <small>Search matched revision {matched.slice(0, 8)}.</small>}<p className="policy-box"><ShieldCheck size={18} />{selected.reason}</p>
+      {selected.conflicting && <section><h3>Compare current branches</h3><div className="branches">{selected.revisions?.filter(r => selected.heads.includes(r.id)).map(r => <label className="branch" key={r.id}><input type="radio" name="chosen" value={r.id} checked={chosen === r.id} onChange={() => setChosen(r.id)} /><b>{r.device} · {date(r.created)}</b><span>{r.content}</span></label>)}</div><p>A new revision will preserve the history of both branches.</p><button className="primary" disabled={busy || !chosen} onClick={() => action(() => api(`/memories/${selected.id}/resolve`, 'POST', { parents: selected.heads, chosen }), 'Conflict resolved with a new revision.')}>Confirm chosen branch</button></section>}
+      <details><summary>Revision history ({selected.revisions?.length})</summary>{selected.revisions?.map(r => <div className="revision" key={r.id}><b>{selected.heads.includes(r.id) ? 'Current branch' : 'Previous revision'}</b><small>{r.device} · {date(r.created)}</small><p>{r.content}</p></div>)}</details>
+      {selected.fixture ? <section><h3>Reviewed reference edits</h3><p>Select a predefined synthetic variant to demonstrate sharing.</p><div className="actions">{[1, 2].map(v => <button className="secondary" disabled={busy || selected.conflicting} key={v} onClick={() => action(() => api(`/memories/${selected.id}/reference-variant`, 'POST', { parent: selected.heads[0], variant: v }), `Approved variant ${v} saved and queued.`)}>Save variant {v}</button>)}</div></section> : <form onSubmit={e => { e.preventDefault(); const d = new FormData(e.currentTarget); action(() => api(`/memories/${selected.id}/revisions`, 'POST', { parent: selected.heads[0], content: d.get('content') }), 'Revision saved locally.'); }}><label>Add a corrected observation<textarea name="content" required maxLength={12000} /></label><button className="secondary" disabled={busy || selected.conflicting}>Save revision</button></form>}
+      <details className="danger-zone"><summary>Archive / deletion</summary><p>Remove from active search. Protected revision history is retained.</p><button className="danger" disabled={busy} onClick={() => action(async () => { await api(`/memories/${selected.id}`, 'DELETE'); closeInspector(); }, 'Memory removed from active search.')}>Remove from active memory</button></details></Dialog>}
   </div>;
 }
-function Stat({label,value,icon,note}:{label:string;value:number;icon:React.ReactNode;note:string}){return <div className="stat"><div><span>{label}</span>{icon}</div><strong>{String(value).padStart(2,'0')}</strong><small>{note}</small></div>}
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<App />);

@@ -8,7 +8,7 @@ import httpx
 from qdrant_client import QdrantClient, models
 
 from .fixtures import REFERENCES
-from .models import Export
+from .models import Export, Receipt, PullPage
 from .security import sign, verify
 
 
@@ -20,12 +20,24 @@ def tls_context(config, client=True):
     return ctx
 
 
+def bounded_post(client, path, data):
+    with client.stream("POST", path, json=data) as response:
+        chunks, size = [], 0
+        for chunk in response.iter_bytes(16384):
+            size += len(chunk)
+            if size > 262144:
+                raise ValueError("Synchronization response exceeds limit")
+            chunks.append(chunk)
+        return httpx.Response(response.status_code, content=b"".join(chunks), request=response.request)
+
+
 class Transport:
     def __init__(self, store, config, secret):
         self.store, self.config, self.secret = store, config, secret
         self.lock = threading.Lock()
         self.last_error = None
         self.last_sync = None
+        self.connection = "unknown"
 
     def run(self):
         if not self.store.get_setting("transport", False) or not self.lock.acquire(blocking=False):
@@ -54,9 +66,10 @@ class Transport:
                         # Ancestors must reach central before tombstone; they contain fixture IDs only.
                         pass
                     try:
-                        response = client.post(
+                        response = bounded_post(
+                            client,
                             "/sync/push",
-                            json={
+                            {
                                 "payload": payload,
                                 "signature": sign(payload, self.secret["sign_private"]),
                             },
@@ -68,9 +81,16 @@ class Transport:
                                 "failed" if permanent else "retry_wait",
                                 error=f"Gateway returned {response.status_code}",
                             )
-                            break
+                            self.connection = "attention" if permanent else "unavailable"
+                            self.last_error = (
+                                "A shared operation needs attention"
+                                if permanent
+                                else "Shared service unavailable"
+                            )
+                            return
                         receipt = response.json()
                         verify(receipt["payload"], receipt["signature"], self.config["gateway_public"])
+                        Receipt.model_validate(receipt["payload"])
                         if receipt["payload"]["operation_id"] != row["id"]:
                             raise ValueError("Receipt identity mismatch")
                         self.store.delivery(row["id"], "acknowledged", receipt=receipt["payload"])
@@ -81,25 +101,30 @@ class Transport:
                         raise
                 cursor = self.store.get_setting("cursor", 0)
                 request = {"device_id": self.store.device, "cursor": cursor, "nonce": str(uuid4())}
-                response = client.post(
-                    "/sync/pull", json={**request, "signature": sign(request, self.secret["sign_private"])}
+                response = bounded_post(
+                    client, "/sync/pull", {**request, "signature": sign(request, self.secret["sign_private"])}
                 )
                 response.raise_for_status()
                 envelope = response.json()
                 verify(envelope["payload"], envelope["signature"], self.config["gateway_public"])
-                body = envelope["payload"]
+                body = PullPage.model_validate(envelope["payload"]).model_dump(mode="json")
                 if body["nonce"] != request["nonce"] or body["from_cursor"] != cursor:
                     raise ValueError("Pull response binding mismatch")
                 for item in body["changes"]:
-                    if item["seq"] <= cursor:
+                    if item["seq"] != cursor + 1:
                         raise ValueError("Invalid change sequence")
                     self.store.accept(item["payload"])
                     self.store.set_setting("cursor", item["seq"])
                     cursor = item["seq"]
                 self.last_error = None
                 self.last_sync = time.time()
+                self.connection = "connected"
+        except httpx.HTTPError:
+            self.connection = "unavailable"
+            self.last_error = "Shared service unavailable; local work continues."
         except Exception:
-            self.last_error = "Central node unavailable or verification failed; local work is safe."
+            self.connection = "verification_error"
+            self.last_error = "Synchronization verification failed; sharing stopped for this attempt."
         finally:
             self.lock.release()
 
@@ -107,6 +132,17 @@ class Transport:
         rows = self.store.outbox()
         return {
             "enabled": self.store.get_setting("transport", False),
+            "connection": (
+                "paused"
+                if not self.store.get_setting("transport", False)
+                else "stale"
+                if self.connection == "connected" and time.time() - (self.last_sync or 0) > 15
+                else self.connection
+            ),
+            "counts": {
+                state: sum(r["state"] == state for r in rows)
+                for state in ("pending", "retry_wait", "failed", "cancelled", "acknowledged")
+            },
             "last_sync": self.last_sync,
             "error": self.last_error,
             "cursor": self.store.get_setting("cursor", 0),
@@ -137,7 +173,7 @@ class CentralProjector:
             )
 
     def drain(self):
-        for job in self.store.pending_jobs():
+        for job in self.store.pending_jobs()[:4]:
             if job["memory_deleted"]:
                 self.client.delete(
                     self.collection, points_selector=models.PointIdsList(points=[job["id"]]), wait=True
@@ -158,7 +194,7 @@ class CentralProjector:
                     ],
                     wait=True,
                 )
-            self.store.mark_indexed(job["id"])
+            self.store.mark_indexed(job["id"], job["generation"])
 
     def close(self):
         self.client.close()

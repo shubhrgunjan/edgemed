@@ -21,10 +21,24 @@ def tokens(text):
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
+MODEL_REVISION = "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
+
+
+def local_embedder(cache, threads=2):
+    path = Path(cache) / "models--Qdrant--bge-small-en-v1.5-onnx-Q" / "snapshots" / MODEL_REVISION
+    if not (path / "model_optimized.onnx").is_file():
+        raise RuntimeError("Pinned local embedding model is missing; provision verified assets first")
+    return TextEmbedding(
+        MODEL, cache_dir=str(cache), local_files_only=True, threads=threads, specific_model_path=str(path)
+    )
+
+
 class Retrieval:
     def __init__(self, store, cache: Path, embedder=None):
         self.store, self.lock = store, threading.RLock()
-        self.model = embedder or TextEmbedding(MODEL, cache_dir=str(cache), local_files_only=True, threads=2)
+        self.model_lock, self.drain_lock = threading.Lock(), threading.Lock()
+        self.model = embedder or local_embedder(cache)
+        self._corpus = None
         path = store.root / "vectors"
         path.mkdir(mode=0o700, exist_ok=True)
         if any(path.iterdir()):
@@ -38,95 +52,189 @@ class Retrieval:
                 ),
             )
             with store.lock:
-                store.db.execute("UPDATE jobs SET state='pending'")
+                store.db.execute("UPDATE jobs SET state='pending',generation=generation+1")
         self.reference = None
+        self.reference_path = None
         self.reload_reference()
 
     def reload_reference(self):
-        if self.reference:
-            self.reference.close()
+        # Open before swapping so a corrupt replacement never closes the working shard.
         state = self.store.get_setting("reference_snapshot")
-        self.reference = q.EdgeShard.load(state["path"]) if state else None
+        path = state["path"] if state else None
+        if path == self.reference_path:
+            return
+        replacement = q.EdgeShard.load(path) if state else None
+        with self.lock:
+            old, self.reference = self.reference, replacement
+            self.reference_path = path
+            if old:
+                old.close()
+
+    def clear_cache(self):
+        with self.lock:
+            self._corpus = None
 
     def drain(self):
-        with self.lock:
-            jobs = self.store.pending_jobs()
-            for job in jobs:
-                if job["memory_deleted"]:
-                    self.shard.update(q.UpdateOperation.delete_points([job["id"]]))
-                else:
-                    vector = next(self.model.embed([job["content"]])).tolist()
-                    self.shard.update(
-                        q.UpdateOperation.upsert_points(
-                            [
-                                q.Point(
-                                    id=job["id"],
-                                    vector={"dense": vector},
-                                    payload={"owner": job["owner"], "memory_id": job["memory_id"]},
-                                )
-                            ]
+        with self.drain_lock:
+            jobs = self.store.pending_jobs()[:4]
+            live = [j for j in jobs if not j["memory_deleted"]]
+            with self.model_lock:
+                vectors = list(self.model.embed([j["content"] for j in live])) if live else []
+            embedded = {j["id"]: v.tolist() for j, v in zip(live, vectors, strict=True)}
+            # Lock order: shard then canonical. No network or model work under either.
+            with self.lock, self.store.lock:
+                accepted = []
+                for job in jobs:
+                    if not self.store.job_current(job):
+                        continue
+                    if job["memory_deleted"]:
+                        self.shard.update(q.UpdateOperation.delete_points([job["id"]]))
+                    else:
+                        self.shard.update(
+                            q.UpdateOperation.upsert_points(
+                                [
+                                    q.Point(
+                                        id=job["id"],
+                                        vector={"dense": embedded[job["id"]]},
+                                        payload={"owner": job["owner"], "memory_id": job["memory_id"]},
+                                    )
+                                ]
+                            )
                         )
-                    )
-                self.shard.flush()
-                self.store.mark_indexed(job["id"])
+                    accepted.append(job)
+                if accepted:
+                    self.shard.flush()
+                for job in accepted:
+                    self.store.mark_indexed(job["id"], job["generation"])
             return len(jobs)
 
-    def search(self, query, owner="operator", limit=10, mode="hybrid", subject=None):
-        with self.lock:
-            vector = next(self.model.query_embed([query])).tolist()
-            points = self.shard.search(
-                q.SearchRequest(
-                    query=q.Query.Nearest(vector, using="dense"),
-                    limit=100,
-                    filter=q.Filter(must=[q.FieldCondition("owner", match=q.MatchValue(owner))]),
-                    with_payload=True,
+    def _load_corpus(self, owner, subject):
+        # One bounded in-memory corpus, invalidated by every canonical transaction.
+        with self.store.lock:
+            key = (owner, subject, self.store.generation)
+            if self._corpus and self._corpus[0] == key:
+                return self._corpus[1]
+            records = self.store.current_records(owner, subject)
+        revisions = {rev["id"]: (mid, rev) for mid, r in records.items() for rev in r["active"]}
+        docs = {rid: Counter(tokens(rev["content"])) for rid, (_, rev) in revisions.items()}
+        lengths = {rid: sum(c.values()) for rid, c in docs.items()}
+        df = Counter(t for counts in docs.values() for t in counts)
+        corpus = (records, revisions, docs, lengths, df, sum(lengths.values()) / max(1, len(docs)))
+        # Conservative estimate; oversized corpora stay uncached, never silently truncated.
+        estimate = sum(
+            len(rev["content"].encode()) * 4 + len(docs[rid]) * 200 + 2048
+            for rid, (_, rev) in revisions.items()
+        )
+        self._corpus = (key, corpus) if estimate <= 32 * 1024 * 1024 else None
+        return corpus
+
+    def search(
+        self, query, owner="operator", limit=10, mode="hybrid", subject=None, timings=None, vector=None
+    ):
+        from .metrics import span
+
+        with span(timings, "normalize"):
+            query = query.strip()
+        if vector is None:
+            with span(timings, "embedding"):
+                with self.model_lock:
+                    vector = next(self.model.query_embed([query])).tolist()
+        with span(timings, "lock_wait"):
+            self.lock.acquire()
+        try:
+            with span(timings, "canonical_and_lexical_prepare"):
+                records, revisions, docs, lengths, df, avg = self._load_corpus(owner, subject)
+            if not revisions:
+                return []
+            # Apply canonical eligibility before top-k to prevent stale/foreign heads crowding hits.
+            eligible = q.Filter(must=[q.HasIdCondition(set(revisions))])
+            with span(timings, "dense_local"):
+                points = self.shard.search(
+                    q.SearchRequest(
+                        query=q.Query.Nearest(vector, using="dense"),
+                        limit=max(100, limit * 4),
+                        filter=eligible,
+                        with_payload=False,
+                    )
                 )
-            )
-            if self.reference:
-                points += self.reference.search(
-                    q.SearchRequest(query=q.Query.Nearest(vector), limit=100, with_payload=True)
-                )
-                points.sort(key=lambda p: -p.score)
-            records = self.store.list(owner, limit=10000)
-            allowed = {r["id"]: r for r in records if subject is None or r["subject"] == subject}
-            scores, dense, lexical = {}, {}, {}
-            for rank, point in enumerate(points):
-                mid = point.payload["memory_id"]
-                if mid not in allowed or str(point.id) not in allowed[mid]["heads"]:
-                    continue
-                scores[mid] = max(scores.get(mid, 0), 1 / (60 + rank + 1))
-                dense[mid] = max(dense.get(mid, -1), point.score)
-            # BM25 is computed locally over authorized canonical text; no keyword representation leaves.
-            docs = {mid: tokens(r["content"]) for mid, r in allowed.items()}
-            avg = sum(map(len, docs.values())) / max(1, len(docs))
-            terms = set(tokens(query))
-            df = {t: sum(t in doc for doc in docs.values()) for t in terms}
-            for mid, doc in docs.items():
-                counts = Counter(doc)
-                score = 0.0
-                for t in terms:
-                    tf = counts[t]
-                    idf = math.log(1 + (len(docs) - df[t] + 0.5) / (df[t] + 0.5))
-                    score += idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * len(doc) / max(avg, 1)))
-                if score:
-                    lexical[mid] = score
-            if mode == "hybrid":
-                for rank, (mid, _) in enumerate(sorted(lexical.items(), key=lambda x: -x[1])):
-                    scores[mid] = scores.get(mid, 0) + 1 / (61 + rank)
-            results = []
-            for mid, score in sorted(scores.items(), key=lambda x: -x[1])[:limit]:
-                results.append(
-                    {
-                        **allowed[mid],
-                        "score": score,
-                        "semantic_score": dense.get(mid),
-                        "keyword_score": lexical.get(mid, 0),
-                    }
-                )
-            return results
+            with span(timings, "dense_reference"):
+                if self.reference:
+                    points += self.reference.search(
+                        q.SearchRequest(
+                            query=q.Query.Nearest(vector),
+                            limit=max(100, limit * 4),
+                            filter=eligible,
+                            with_payload=False,
+                        )
+                    )
+            with span(timings, "keyword"):
+                lexical = {}
+                if mode == "hybrid":
+                    terms = set(tokens(query))
+                    for rid, counts in docs.items():
+                        score = 0.0
+                        for t in terms:
+                            tf = counts[t]
+                            if tf:
+                                idf = math.log(1 + (len(docs) - df[t] + 0.5) / (df[t] + 0.5))
+                                score += (
+                                    idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * lengths[rid] / max(avg, 1)))
+                                )
+                        if score:
+                            lexical[rid] = score
+            with span(timings, "fusion"):
+                dense = {}
+                for p in points:
+                    rid = str(p.id)
+                    if rid in revisions:
+                        dense[rid] = max(dense.get(rid, -1), p.score)
+                scores = {
+                    rid: 1 / (61 + rank)
+                    for rank, (rid, _) in enumerate(sorted(dense.items(), key=lambda v: (-v[1], v[0])))
+                }
+                for rank, (rid, _) in enumerate(sorted(lexical.items(), key=lambda v: (-v[1], v[0]))):
+                    scores[rid] = scores.get(rid, 0) + 1 / (61 + rank)
+                chosen = {}
+                for rid in sorted(scores, key=lambda rid: (-scores[rid], rid)):
+                    mid, rev = revisions[rid]
+                    if mid not in chosen:
+                        chosen[mid] = (rid, rev)
+                results = []
+            with span(timings, "payload"):
+                for mid, (rid, rev) in list(chosen.items())[:limit]:
+                    r = records[mid]
+                    results.append(
+                        {
+                            k: r[k]
+                            for k in (
+                                "id",
+                                "title",
+                                "subject",
+                                "category",
+                                "privacy",
+                                "release",
+                                "heads",
+                                "fixture",
+                                "conflicting",
+                                "index_state",
+                                "created",
+                            )
+                        }
+                    )
+                    results[-1].update(
+                        content=rev["content"][:500],
+                        matched_revision_id=rid,
+                        score=scores[rid],
+                        semantic_score=dense.get(rid),
+                        keyword_score=lexical.get(rid, 0),
+                    )
+                return self.store.eligible_results(results, owner, subject)
+        finally:
+            self.lock.release()
 
     def close(self):
-        with self.lock:
+        with self.drain_lock, self.model_lock, self.lock:
+            self._corpus = None
             if self.reference:
                 self.reference.close()
             self.shard.close()

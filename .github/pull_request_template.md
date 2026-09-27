@@ -28,6 +28,6 @@
 - [ ] No plaintext storage of credentials or sensitive clinical notes
 
 ## Phase Gate Checklist
-- [ ] **PHASE 0 INVARIANT:** No production code, mock APIs, or UI implementation files committed.
+- [ ] Prototype changes include applicable backend, build, browser and security checks; no runtime data or secrets committed.
 - [ ] All Mermaid diagrams validated.
 - [ ] All internal Markdown links verified.

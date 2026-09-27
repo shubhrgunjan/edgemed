@@ -1,0 +1,24 @@
+{
+  "restart_scope": "five store/model/shard reloads within one process; OS cache uncontrolled",
+  "model_and_store_start_ms": [
+    89.30479201080743,
+    61.428583998349495,
+    62.10062500031199,
+    66.53358299809042,
+    61.61866700858809
+  ],
+  "first_query_ms": [
+    3.873416004353203,
+    2.73837499844376,
+    2.5642910040915012,
+    2.5109170092036948,
+    2.491666004061699
+  ],
+  "search_during_indexing": {
+    "samples": 54,
+    "p50_ms": 2.849,
+    "p95_ms": 48.836,
+    "p99_ms": 49.316,
+    "max_ms": 49.316
+  }
+}

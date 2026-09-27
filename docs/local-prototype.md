@@ -1,59 +1,53 @@
-# Local prototype implementation
+# EdgeMed local prototype
 
-This branch adds a working, synthetic-data-only prototype to the existing architecture repository. It is a draft implementation, not a production or clinical deployment. The earlier Phase 0 documents describe the intended architecture; they are preserved as design references. The implementation was explicitly authorized after the planning stage. The complete roadmap in `project-planning.md` is not a completion checklist.
+The application now includes the next-phase correctness, security, retrieval and interface changes. It remains a synthetic-data-only informational memory prototype. The original architecture documents are design references, not a statement that every post-hackathon feature is implemented.
 
-## Implemented
+## What changed
 
-- Python/FastAPI local service with SQLCipher canonical storage, immutable revisions, a durable indexing queue, audit events, ownership filtering, and tombstones.
-- Real Qdrant Edge with cached FastEmbed/ONNX dense embeddings, local lexical ranking, and reciprocal-rank fusion.
-- React/TypeScript interface for local login, memory search and inspection, observations, revision/conflict review, subject relationships, timeline, and synchronization status.
-- Two simulated devices and a central gateway using mutual TLS, signed operations/receipts, durable synchronization queues, idempotency, and explicit conflict resolution.
-- Synchronization exports only predefined reviewed synthetic reference identifiers/variants. Arbitrary notes and private embeddings are excluded from the export schema.
-- Signed full reference snapshots from Qdrant Server with archive/manifest validation and a separate imported reference shard.
-- macOS launcher with an encrypted APFS sparsebundle, Keychain secrets, generated credentials, Argon2 authentication, session cookies, CSRF checks, and loopback host/origin restrictions.
+- Versioned indexing jobs prevent a stale embedding/upsert acknowledgement from clearing a pending deletion. Native worker operations finish before storage closes.
+- Search uses bulk current-head reads, a bounded in-memory lexical corpus, canonical prefiltering and a final authorization/revision check. It no longer silently limits the eligible corpus to 10,000 records. Conflicting search results identify the matched revision.
+- Five-minute idle expiry and 30-minute absolute expiry protect sessions. Polling does not extend them. Sign-out/expiry cancels data requests and clears query, forms, selections and records; late responses cannot restore a previous session's data.
+- Gateway request and response sizes are bounded. Pull pages and acceptance receipts are validated. The interface distinguishes gateway reachability, paused sharing, stale status and verification errors.
+- The interface emphasizes capture, local search, review and sharing history. Approved reference operations are visibly separate from private observations. Dialog keyboard focus, responsive layout and delayed-response behavior have browser tests.
+- Snapshot download is outside the search lock; replacement is opened before the working shard is closed. Failed activation preserves the previous reference state.
+- The launcher supports isolated verification namespaces, verifies encrypted image status, checks pinned asset hashes, waits for readiness and can create a verified cold encrypted-container backup.
 
-## Local operation
+## Setup on macOS ARM64
 
-The development environment used Python 3.12, the committed `uv.lock`, the frontend npm lockfile, Qdrant Server 1.19.1, and the locally cached `BAAI/bge-small-en-v1.5` model. The native Qdrant executable is expected at `.tools/qdrant`; the model cache is under `.cache`. Neither is committed. A fresh clone still needs these assets provisioned, SQLCipher build prerequisites, dependency installation, and a frontend build. There is no complete automated fresh-machine installer yet.
-
-On the already provisioned development Mac, run from the repository root:
+Install Python 3.12, uv, Node.js and SQLCipher build prerequisites. On a development Mac with Homebrew:
 
 ```sh
-.venv/bin/python -m edgemed.cli start
-.venv/bin/python -m edgemed.cli credentials edge-a
+brew install sqlcipher uv node
+export CFLAGS="-I$(brew --prefix sqlcipher)/include/sqlcipher"
+export LDFLAGS="-L$(brew --prefix sqlcipher)/lib -lsqlcipher"
+uv sync --frozen
+(cd frontend && npm ci && npm run build)
+uv run python scripts/provision_assets.py
+uv run python -m edgemed.cli setup
+uv run python -m edgemed.cli preflight
+uv run python -m edgemed.cli start
 ```
 
-The credentials command displays a local password: keep its output private. Device A is at `http://127.0.0.1:8765` and device B at `http://127.0.0.1:8766`. Use only synthetic data. `stop` stops services; `lock` also attempts to unmount the encrypted vault. Browser sign-out does not unmount it. The full lock/restart cycle has not yet been validated.
+Provisioning explicitly downloads pinned public model and binary assets and checks their hashes. Runtime model loading uses the pinned local model path and has no download fallback. The committed asset manifest currently supports macOS ARM64 only. Do not substitute a Linux ARM wheel for an Android build.
 
-Runtime storage is in `~/Library/Application Support/EdgeMed Local`, outside the repository. Database files, keys, certificates, model weights, binaries, build outputs, and browser artifacts are excluded from the commit.
+Device A is at `http://127.0.0.1:8765`, Device B at `http://127.0.0.1:8766`. Retrieve the generated local password privately with `uv run python -m edgemed.cli credentials edge-a`. Do not include that output in logs, screenshots, tickets or commits.
 
-## Validation
+`stop` stops the services; `lock` stops them and unmounts the encrypted vault. Sign-out only hides the browser workspace. `backup --output /path/to/new-directory` stops services, unmounts the vault and copies/checksums its encrypted container. That backup requires the original Keychain material; portable key recovery is not implemented.
 
-Checks rerun before this push:
+## Verification
 
-- Ruff: passed.
-- Backend pytest: 32 passed; one Starlette TestClient deprecation warning.
-- TypeScript and Vite production build: passed.
-
-Earlier local results included eight real integration checks covering synchronization, conflicts, restricted-data exclusion, deletion visibility, mTLS rejection, signature rejection, and Qdrant projection. See `local-integration-results.json`. A full signed reference snapshot was imported; see `snapshot-results.json`. Two Playwright browser tests passed before the final UI refinements; they were not rerun for this push. Dependency audits reported no known vulnerabilities during implementation, not a guarantee of security.
-
-The recorded benchmark used 1,000 synthetic records and 30 queries from five repeated templates: median 15.15 ms, p95 23.69 ms, peak process RSS 263.6 MB. See `benchmark-results.json`. This is a functional/performance sample, not a held-out clinical accuracy evaluation or a large-scale benchmark.
-
-To repeat available checks in the provisioned environment:
+See [next-phase results](next-phase-results.md) for the measured comparison, completed tests and explicit limitations. Run:
 
 ```sh
-.venv/bin/ruff check edgemed tests scripts
-.venv/bin/pytest -q
+uv run ruff check edgemed tests scripts
+uv run pytest -q
 (cd frontend && npm run build)
 ```
 
-Browser tests require running local services, provisioned Keychain credentials, and Chromium. Integration scripts mutate synthetic demo state. Python socket blocking tests do not establish operating-system-level network isolation.
+Real model tests require the verified cache. Browser and live synchronization tests require a separately provisioned verification environment; see [runbook](next-phase-runbook.md). They must not reset or mutate the user's original vault.
 
-## Work remaining before readiness review
+## Security boundary
 
-- Resolve the deletion-during-embedding race: canonical filtering hides deleted records, but a derived vector may remain if deletion happens while embedding is running.
-- Complete fresh-machine provisioning and the final browser/integration regression run.
-- Validate vault lock/restart, backup recovery, device revocation, and key rotation workflows.
-- Reconcile the prototype API/schema with the existing design contracts and record architecture decisions for the narrowed scope.
-- Add differential snapshot support and deeper graph/consolidation/governance behavior if required. Governance is currently advisory, and the graph is a subject relationship view.
-- Complete an independent security review before considering real sensitive data. This prototype makes no compliance or clinical-safety claim.
+SQLCipher is authoritative; Edge stores derived vectors. Private observations and their embeddings stay local. Only predefined reviewed synthetic reference identifiers and variants enter synchronization. TLS, signatures, idempotency, canonical filtering, session controls and encrypted runtime storage support this boundary.
+
+Encryption does not protect decrypted process memory from malware running as the unlocked OS user. HMAC audit chaining does not prove protection against whole-store rollback. Deletion hides/purges derived vectors but intentionally preserves encrypted revision history. No clinical or regulatory compliance claim is made.

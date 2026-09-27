@@ -1,3 +1,5 @@
+> Current implementation status: [local prototype](local-prototype.md) and [next-phase validation](next-phase-results.md). The phase description below is the historical architecture baseline.
+
 # Project Status: EdgeMed Memory Lab
 
 - **Repository:** `edgemed`

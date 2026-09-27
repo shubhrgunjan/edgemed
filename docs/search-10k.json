@@ -1,0 +1,34 @@
+{
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "records": 10000,
+  "query_templates": 5,
+  "unique_queries": 200,
+  "application_query_cache": "disabled",
+  "runs": [
+    {
+      "samples": 200,
+      "p50_ms": 101.478,
+      "p95_ms": 105.671,
+      "p99_ms": 112.964,
+      "max_ms": 182.405
+    }
+  ],
+  "quality_note": "Synthetic template retrieval; not held-out clinical quality",
+  "pid": 54818,
+  "model_shard_load_seconds": 0.222,
+  "index_seconds": 183.464,
+  "first_search_after_index_ms": 196.777,
+  "template_hit_at_5": 1.0,
+  "stage_p50_ms": {
+    "normalize": 0.001,
+    "embedding": 2.41,
+    "lock_wait": 0.001,
+    "canonical_and_lexical_prepare": 71.975,
+    "dense_local": 1.753,
+    "dense_reference": 0.0,
+    "keyword": 6.095,
+    "fusion": 5.812,
+    "payload": 1.097
+  },
+  "peak_rss_mib": 257.34
+}

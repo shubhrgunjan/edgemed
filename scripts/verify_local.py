@@ -1,13 +1,15 @@
 """Exercise the running encrypted demo. Prints checks, never credentials or note bodies."""
 
 import json
+import os
+import signal
 import time
 from pathlib import Path
 from uuid import uuid4
 
 import httpx
 
-from edgemed.cli import config
+from edgemed.cli import config, RUNTIME, SERVICE, start, alive
 from edgemed.fixtures import fixture_id
 from edgemed.security import load_secret
 from edgemed.sync import tls_context
@@ -36,7 +38,7 @@ def call(c, path, data=None):
     return r.json()
 
 
-def settle(a, b, mid, predicate, timeout=20):
+def settle(a, b, mid, predicate, timeout=90):
     start = time.monotonic()
     while time.monotonic() - start < timeout:
         call(a, "/api/sync")
@@ -49,22 +51,34 @@ def settle(a, b, mid, predicate, timeout=20):
 
 
 def main():
-    a, b = client("edge-a", 8765), client("edge-b", 8766)
+    if SERVICE == "org.lex.edgemed.local":
+        raise RuntimeError("Rehearsal requires an isolated verification runtime; original data is protected")
+    a, b = client("edge-a", config("edge-a")["port"]), client("edge-b", config("edge-b")["port"])
     for c in (a, b):
         call(c, "/api/demo/seed")
         call(c, "/api/sync/transport", {"enabled": True})
     mid = fixture_id("reference-hydration")
     settle(a, b, mid, lambda x, y: set(x["heads"]) == set(y["heads"]))
     passed("Live mTLS edge-to-central-to-edge synchronization")
-    for c in (a, b):
-        call(c, "/api/sync/transport", {"enabled": False})
-    # Wait for already-started bounded transport operations to finish.
-    time.sleep(1)
+    # Actually stop the isolated gateway; loopback device APIs keep serving.
+    pid = json.loads((RUNTIME / "processes.json").read_text())["central"]
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(100):
+        if not alive(pid):
+            break
+        time.sleep(0.1)
+    assert not alive(pid)
+    saved = call(
+        a, "/api/memories", {"title": "Offline rehearsal", "content": "Synthetic offline fever and cough"}
+    )
+    found = call(a, "/api/search", {"query": "offline fever cough"})
+    assert any(r["id"] == saved["id"] for r in found["results"])
+    passed("Actual gateway outage preserves local capture and hybrid search")
     base = a.get("/api/memories/" + mid).json()["heads"][0]
     call(a, "/api/memories/" + mid + "/reference-variant", {"parent": base, "variant": 1})
     call(b, "/api/memories/" + mid + "/reference-variant", {"parent": base, "variant": 2})
-    for c in (a, b):
-        call(c, "/api/sync/transport", {"enabled": True})
+    assert any(r["state"] != "acknowledged" for r in a.get("/api/sync/status").json()["items"])
+    start()
     ma, mb = settle(
         a, b, mid, lambda x, y: x["conflicting"] and y["conflicting"] and set(x["heads"]) == set(y["heads"])
     )
@@ -93,7 +107,7 @@ def main():
     for verify_arg in (True, tls_context(cfg, client=False)):
         try:
             with httpx.Client(verify=verify_arg, trust_env=False, timeout=4) as c:
-                c.post("https://127.0.0.1:9443/sync/pull", json={})
+                c.post(cfg["gateway"] + "/sync/pull", json={})
         except httpx.HTTPError:
             continue
         raise AssertionError("TLS admitted a client without its certificate or trusted server CA")
@@ -123,6 +137,14 @@ def main():
         assert r.json()["result"]
         assert canary not in r.text
         passed("Accepted revision projected into real Qdrant Server 1.19.1")
+    for _ in range(20):
+        snapshot = a.post("/api/sync/reference-snapshot")
+        if snapshot.status_code == 200:
+            break
+        time.sleep(0.5)
+    snapshot.raise_for_status()
+    assert snapshot.json()["points"] > 0
+    passed("Signed full reference snapshot verified and activated")
     for c in (a, b):
         call(c, "/api/sync/transport", {"enabled": False})
         c.close()

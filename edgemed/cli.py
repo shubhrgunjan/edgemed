@@ -20,7 +20,16 @@ from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from .security import SERVICE, PASSWORDS, load_secret, save_secret, new_identity, private_write
 
 PROJECT = Path(__file__).resolve().parent.parent
-RUNTIME = Path.home() / "Library/Application Support/EdgeMed Local"
+RUNTIME = (
+    Path(os.environ.get("EDGEMED_RUNTIME", Path.home() / "Library/Application Support/EdgeMed Local"))
+    .expanduser()
+    .resolve()
+)
+PORT_OFFSET = int(os.environ.get("EDGEMED_PORT_OFFSET", "0"))
+if not 0 <= PORT_OFFSET <= 50000:
+    raise ValueError("Invalid local port offset")
+if "EDGEMED_RUNTIME" in os.environ and SERVICE == "org.lex.edgemed.local":
+    raise RuntimeError("An isolated runtime requires a distinct EDGEMED_KEYCHAIN_SERVICE")
 VAULT = RUNTIME / "vault"
 
 
@@ -78,7 +87,10 @@ def verify_vault():
 
     info = plistlib.loads(subprocess.check_output(["hdiutil", "info", "-plist"]))
     for image in info.get("images", []):
-        if image.get("image-path") == str(RUNTIME / "data.sparsebundle"):
+        if (
+            image.get("image-path") == str(RUNTIME / "data.sparsebundle")
+            and image.get("image-encrypted") is True
+        ):
             if any(e.get("mount-point") == str(VAULT) for e in image.get("system-entities", [])):
                 return True
     raise RuntimeError("Expected encrypted data image is not mounted; refusing to write data")
@@ -152,6 +164,8 @@ def setup():
         try:
             secret = load_secret(name)
         except RuntimeError:
+            if (VAULT / name / "data" / "memory.db").exists():
+                raise RuntimeError("Existing profile keys unavailable; refusing to replace them") from None
             priv, pub = new_identity()
             password = secrets.token_urlsafe(18)
             secret = {
@@ -171,6 +185,7 @@ def setup():
             save_secret(name, secret)
         identities[name] = secret
     for name, port in (("edge-a", 8765), ("edge-b", 8766), ("central", 9443)):
+        port += PORT_OFFSET
         root = VAULT / name
         root.mkdir(exist_ok=True, mode=0o700)
         cfg = {
@@ -182,9 +197,9 @@ def setup():
             "ca": str(pki / "ca.pem"),
             "cert": str(pki / f"{name}.pem"),
             "key": str(pki / f"{name}.key"),
-            "gateway": "https://127.0.0.1:9443",
+            "gateway": f"https://127.0.0.1:{9443 + PORT_OFFSET}",
             "gateway_public": identities["central"]["sign_public"],
-            "qdrant": "https://127.0.0.1:6333",
+            "qdrant": f"https://127.0.0.1:{6333 + PORT_OFFSET}",
             "devices": {
                 n: {"public": identities[n]["sign_public"], "revoked": False} for n in ("edge-a", "edge-b")
             },
@@ -201,7 +216,7 @@ def setup():
         },
         "service": {
             "host": "127.0.0.1",
-            "http_port": 6333,
+            "http_port": 6333 + PORT_OFFSET,
             "grpc_port": None,
             "enable_tls": True,
             "api_key": identities["central"]["qdrant_api_key"],
@@ -218,7 +233,9 @@ def setup():
 
 def config(profile):
     verify_vault()
-    return json.loads((VAULT / profile / "config.json").read_text())
+    value = json.loads((VAULT / profile / "config.json").read_text())
+    value["profiling"] = os.environ.get("EDGEMED_PROFILE") == "1"
+    return value
 
 
 def serve(profile):
@@ -258,6 +275,9 @@ def alive(pid):
 
 def start():
     mount_vault()
+    from .operations import preflight
+
+    preflight(PROJECT)
     pidfile = RUNTIME / "processes.json"
     pids = json.loads(pidfile.read_text()) if pidfile.exists() else {}
     commands = {
@@ -275,7 +295,20 @@ def start():
         pids[name] = proc.pid
         private_write(pidfile, json.dumps(pids))
         time.sleep(2 if name == "qdrant" else 1)
-    print("Device A: http://127.0.0.1:8765\nDevice B: http://127.0.0.1:8766")
+    import httpx
+
+    for profile in ("edge-a", "edge-b"):
+        url = config(profile)["origin"]
+        for _ in range(60):
+            try:
+                if httpx.get(url + "/api/health", timeout=1, trust_env=False).status_code == 200:
+                    break
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.5)
+        else:
+            raise RuntimeError(f"{profile} did not become ready; inspect protected runtime logs")
+        print(f"{profile}: {url}")
 
 
 def stop():
@@ -302,8 +335,11 @@ def stop():
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description="EdgeMed encrypted local demo")
-    parser.add_argument("command", choices=["setup", "start", "stop", "lock", "credentials", "serve"])
+    parser.add_argument(
+        "command", choices=["setup", "start", "stop", "lock", "credentials", "serve", "preflight", "backup"]
+    )
     parser.add_argument("profile", nargs="?", choices=["edge-a", "edge-b", "central"], default="edge-a")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.command == "setup":
         setup()
@@ -317,6 +353,19 @@ def main():
         stop()
         subprocess.run(["hdiutil", "detach", str(VAULT)], check=True)
         print("Services stopped and encrypted vault unmounted.")
+    elif args.command == "preflight":
+        from .operations import preflight
+
+        print(json.dumps(preflight(PROJECT), indent=2))
+    elif args.command == "backup":
+        from .operations import cold_backup
+
+        if not args.output:
+            parser.error("backup requires --output (a new directory)")
+        stop()
+        if VAULT.is_mount():
+            subprocess.run(["hdiutil", "detach", str(VAULT)], check=True)
+        print(json.dumps(cold_backup(RUNTIME / "data.sparsebundle", args.output), indent=2))
     elif args.command == "credentials":
         print("Username: operator\nPassword:", load_secret(args.profile)["initial_password"])
 

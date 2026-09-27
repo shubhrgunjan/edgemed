@@ -1,15 +1,17 @@
 {
   "checks": [
     "Live mTLS edge-to-central-to-edge synchronization",
+    "Actual gateway outage preserves local capture and hybrid search",
     "Concurrent offline edits survive reconnect on both devices",
     "Explicit resolution converges without erasing historical revisions",
     "Highly sensitive record excluded from live queue and peer device",
     "Deletion hides record immediately",
     "mTLS rejects missing client certificate and untrusted CA",
     "Gateway rejects invalid device signature",
-    "Accepted revision projected into real Qdrant Server 1.19.1"
+    "Accepted revision projected into real Qdrant Server 1.19.1",
+    "Signed full reference snapshot verified and activated"
   ],
-  "passed": 8,
+  "passed": 10,
   "failed": 0,
-  "timestamp": 1790505016.676636
+  "timestamp": 1790544915.544172
 }

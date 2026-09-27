@@ -107,3 +107,9 @@ test-results/
 *.tsbuildinfo
 .env.*
 !.env.example
+
+# Also exclude local development symlinks and native scratch files
+.cache
+.tools
+frontend/node_modules
+*.ses
