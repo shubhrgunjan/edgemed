@@ -235,6 +235,11 @@ def config(profile):
     verify_vault()
     value = json.loads((VAULT / profile / "config.json").read_text())
     value["profiling"] = os.environ.get("EDGEMED_PROFILE") == "1"
+    if profile == "edge-a" and os.environ.get("EDGEMED_LAN") == "1":
+        from .lan import load
+
+        value.update(load(VAULT / "pki", value["port"]))
+        value["lan_mode"] = True
     return value
 
 
@@ -261,7 +266,15 @@ def serve(profile):
             from .api import create_app
 
             app = create_app(cfg, secret, PROJECT / ".cache/models", PROJECT / "frontend/dist")
-            uvicorn.run(app, host="127.0.0.1", port=cfg["port"], access_log=False, log_level="warning")
+            uvicorn.run(
+                app,
+                host=cfg.get("bind", "127.0.0.1"),
+                port=cfg["port"],
+                access_log=False,
+                log_level="warning",
+                ssl_certfile=cfg.get("tls_cert"),
+                ssl_keyfile=cfg.get("tls_key"),
+            )
 
 
 def alive(pid):
@@ -273,13 +286,24 @@ def alive(pid):
         return False
 
 
-def start():
+def start(lan=False):
     mount_vault()
     from .operations import preflight
 
     preflight(PROJECT)
+    if lan:
+        from .lan import load
+
+        load(VAULT / "pki", 8765 + PORT_OFFSET)
     pidfile = RUNTIME / "processes.json"
     pids = json.loads(pidfile.read_text()) if pidfile.exists() else {}
+    mode = "lan" if lan else "local"
+    mode_file = RUNTIME / "start-mode"
+    if (
+        any(alive(pid) for pid in pids.values())
+        and (mode_file.read_text() if mode_file.is_file() else "local") != mode
+    ):
+        raise RuntimeError("Services are already running in another mode; stop them before switching")
     commands = {
         "qdrant": [str(PROJECT / ".tools/qdrant"), "--config-path", str(VAULT / "qdrant.yaml")],
         **{p: [sys.executable, "-m", "edgemed.cli", "serve", p] for p in ("central", "edge-a", "edge-b")},
@@ -288,20 +312,38 @@ def start():
         if name in pids and alive(pids[name]):
             continue
         log = open(VAULT / f"{name}.log", "ab", buffering=0)
+        environment = {**os.environ, "EDGEMED_LAN": "1" if lan and name == "edge-a" else "0"}
         proc = subprocess.Popen(
-            command, cwd=PROJECT, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True
+            command,
+            cwd=PROJECT,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+            env=environment,
         )
         log.close()
         pids[name] = proc.pid
         private_write(pidfile, json.dumps(pids))
+        private_write(mode_file, mode)
         time.sleep(2 if name == "qdrant" else 1)
     import httpx
 
     for profile in ("edge-a", "edge-b"):
-        url = config(profile)["origin"]
+        cfg = config(profile)
+        if lan and profile == "edge-a":
+            from .lan import load
+
+            cfg.update(load(VAULT / "pki", cfg["port"]))
+        url = cfg["origin"]
         for _ in range(60):
             try:
-                if httpx.get(url + "/api/health", timeout=1, trust_env=False).status_code == 200:
+                if (
+                    httpx.get(
+                        url + "/api/health", timeout=1, trust_env=False, verify=cfg.get("tls_ca", True)
+                    ).status_code
+                    == 200
+                ):
                     break
             except httpx.HTTPError:
                 pass
@@ -327,6 +369,7 @@ def stop():
     for _ in range(50):
         if not any(alive(pid) for pid in pids.values()):
             path.unlink(missing_ok=True)
+            (RUNTIME / "start-mode").unlink(missing_ok=True)
             return
         time.sleep(0.2)
     raise RuntimeError("Some services have not stopped; vault remains mounted")
@@ -336,17 +379,38 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description="EdgeMed encrypted local demo")
     parser.add_argument(
-        "command", choices=["setup", "start", "stop", "lock", "credentials", "serve", "preflight", "backup"]
+        "command",
+        choices=[
+            "setup",
+            "start",
+            "stop",
+            "lock",
+            "credentials",
+            "serve",
+            "preflight",
+            "backup",
+            "lan-configure",
+            "staff-add",
+            "staff-disable",
+            "staff-list",
+        ],
     )
     parser.add_argument("profile", nargs="?", choices=["edge-a", "edge-b", "central"], default="edge-a")
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--lan", action="store_true", help="Serve edge-a over verified HTTPS on its configured private LAN IP"
+    )
+    parser.add_argument("--lan-ip", help="Private IPv4 address currently assigned to this computer")
+    parser.add_argument("--username")
+    parser.add_argument("--workspace")
+    parser.add_argument("--role", choices=["clinician", "admin"], default="clinician")
     args = parser.parse_args()
     if args.command == "setup":
         setup()
     elif args.command == "serve":
         serve(args.profile)
     elif args.command == "start":
-        start()
+        start(lan=args.lan)
     elif args.command == "stop":
         stop()
     elif args.command == "lock":
@@ -366,6 +430,52 @@ def main():
         if VAULT.is_mount():
             subprocess.run(["hdiutil", "detach", str(VAULT)], check=True)
         print(json.dumps(cold_backup(RUNTIME / "data.sparsebundle", args.output), indent=2))
+    elif args.command == "lan-configure":
+        if not args.lan_ip:
+            parser.error("lan-configure requires --lan-ip")
+        from .lan import configure, private_lan_ip
+
+        private_lan_ip(args.lan_ip)
+        stop()
+        mount_vault()
+        result = configure(VAULT / "pki", args.lan_ip, 8765 + PORT_OFFSET)
+        print(json.dumps({**result, "ca_path": str(VAULT / "pki/lan-ca.pem")}, indent=2))
+    elif args.command == "staff-add":
+        if not args.username or not args.workspace:
+            parser.error("staff-add requires --username and --workspace")
+        from .accounts import add
+
+        staff = load_secret("edge-a")
+        password = add(staff, args.username, args.workspace, args.role)
+        stop()
+        save_secret("edge-a", staff)
+        print("Staff account added. Username:", args.username, "Password (shown once):", password)
+    elif args.command == "staff-disable":
+        if not args.username:
+            parser.error("staff-disable requires --username")
+        from .accounts import disable
+
+        staff = load_secret("edge-a")
+        disable(staff, args.username)
+        stop()
+        save_secret("edge-a", staff)
+        print("Staff account disabled; restart services to resume with fresh sessions.")
+    elif args.command == "staff-list":
+        staff = load_secret("edge-a")
+        print(
+            json.dumps(
+                [
+                    {
+                        "username": name,
+                        "workspace": data["owner"],
+                        "role": data["role"],
+                        "disabled": data.get("disabled", False),
+                    }
+                    for name, data in sorted(staff["operators"].items())
+                ],
+                indent=2,
+            )
+        )
     elif args.command == "credentials":
         print("Username: operator\nPassword:", load_secret(args.profile)["initial_password"])
 

@@ -251,14 +251,13 @@ class Store:
 
     def list(self, owner="operator", limit=100, offset=0):
         with self.lock:
-            ids = [
-                r[0]
-                for r in self.db.execute(
-                    "SELECT id FROM memories WHERE owner=? AND deleted=0 ORDER BY created DESC LIMIT ? OFFSET ?",
-                    (owner, limit, offset),
-                )
-            ]
-            return [self.get(mid, owner) for mid in ids]
+            clause, scopes = self._scope_clause(owner)
+            rows = self.db.execute(
+                f"SELECT id,owner FROM memories WHERE owner IN {clause} AND deleted=0 "
+                "ORDER BY created DESC LIMIT ? OFFSET ?",
+                (*scopes, limit, offset),
+            )
+            return [self.get(row[0], row[1]) for row in rows]
 
     def revise(self, mid, parents, content=None, variant=None, owner="operator", deleted=False):
         with self.transaction():
@@ -377,16 +376,24 @@ class Store:
             ).fetchone()
             return bool(row and row[0] == job["generation"] and row[1] != "indexed")
 
+    @staticmethod
+    def _scope_clause(owner):
+        scopes = (owner,) if isinstance(owner, str) else tuple(owner)
+        if not scopes or len(scopes) > 2 or any(not isinstance(scope, str) for scope in scopes):
+            raise ValueError("Invalid authorized scope")
+        return "(" + ",".join("?" for _ in scopes) + ")", scopes
+
     def current_records(self, owner="operator", subject=None):
         """One SQL read of all authorized current heads; no history or silent corpus cap."""
         with self.lock:
+            clause, scopes = self._scope_clause(owner)
             rows = self.db.execute(
                 "SELECT m.*,r.id AS rid,r.content,r.created AS revision_created,j.state AS index_state "
                 "FROM memories m JOIN json_each(m.heads) h "
                 "JOIN revisions r ON r.id=h.value JOIN jobs j ON j.revision_id=r.id "
-                "WHERE m.owner=? AND m.deleted=0 AND (? IS NULL OR m.subject=?) "
+                f"WHERE m.owner IN {clause} AND m.deleted=0 AND (? IS NULL OR m.subject=?) "
                 "ORDER BY m.created DESC,m.id,r.created,r.id",
-                (owner, subject, subject),
+                (*scopes, subject, subject),
             ).fetchall()
             records = {}
             for row in rows:
@@ -408,12 +415,14 @@ class Store:
 
     def summaries(self, owner="operator", limit=100, offset=0, conflicts=False):
         with self.lock:
+            clause, scopes = self._scope_clause(owner)
             rows = self.db.execute(
                 "SELECT m.*,json_array_length(heads)>1 AS conflicting,"
                 "EXISTS(SELECT 1 FROM json_each(m.heads) h JOIN jobs j ON j.revision_id=h.value "
                 "WHERE j.state!='indexed') AS pending FROM memories m "
-                "WHERE owner=? AND deleted=0 AND (?=0 OR json_array_length(heads)>1) ORDER BY created DESC,id LIMIT ? OFFSET ?",
-                (owner, int(conflicts), limit, offset),
+                f"WHERE owner IN {clause} AND deleted=0 AND (?=0 OR json_array_length(heads)>1) "
+                "ORDER BY created DESC,id LIMIT ? OFFSET ?",
+                (*scopes, int(conflicts), limit, offset),
             ).fetchall()
             return [
                 {
@@ -428,13 +437,14 @@ class Store:
 
     def stats(self, owner):
         with self.lock:
+            clause, scopes = self._scope_clause(owner)
             row = self.db.execute(
                 "SELECT count(*) AS total,coalesce(sum(fixture IS NULL),0) AS local_only,"
                 "coalesce(sum(json_array_length(heads)>1),0) AS conflicts,"
                 "coalesce(sum(NOT EXISTS(SELECT 1 FROM json_each(m.heads) h JOIN jobs j "
                 "ON j.revision_id=h.value WHERE j.state!='indexed')),0) AS indexed "
-                "FROM memories m WHERE owner=? AND deleted=0",
-                (owner,),
+                f"FROM memories m WHERE owner IN {clause} AND deleted=0",
+                scopes,
             ).fetchone()
             return dict(row)
 
@@ -443,11 +453,12 @@ class Store:
         with self.lock:
             if not results:
                 return []
+            clause, scopes = self._scope_clause(owner)
             ids = [r["id"] for r in results]
             rows = self.db.execute(
-                "SELECT id,heads FROM memories WHERE owner=? AND deleted=0 "
+                f"SELECT id,heads FROM memories WHERE owner IN {clause} AND deleted=0 "
                 "AND (? IS NULL OR subject=?) AND id IN (" + ",".join("?" for _ in ids) + ")",
-                [owner, subject, subject, *ids],
+                [*scopes, subject, subject, *ids],
             )
             allowed = {r[0]: json.loads(r[1]) for r in rows}
             return [r for r in results if r["id"] in allowed and r["matched_revision_id"] in allowed[r["id"]]]
@@ -473,12 +484,23 @@ class Store:
             )
             self.event("sync_" + state)
 
-    def activity(self):
+    def activity(self, owner=None):
         with self.lock:
-            return [
-                json.loads(r[0])
-                for r in self.db.execute("SELECT payload FROM events ORDER BY seq DESC LIMIT 40")
-            ]
+            scopes = None if owner is None else set(self._scope_clause(owner)[1])
+            events = []
+            for row in self.db.execute("SELECT payload FROM events ORDER BY seq DESC LIMIT 200"):
+                event = json.loads(row[0])
+                if scopes is not None:
+                    memory_id = event["memory_id"]
+                    if not memory_id:
+                        continue
+                    memory = self.db.execute("SELECT owner FROM memories WHERE id=?", (memory_id,)).fetchone()
+                    if not memory or memory[0] not in scopes:
+                        continue
+                events.append(event)
+                if len(events) >= 40:
+                    break
+            return events
 
     def graph(self, owner="operator"):
         records = self.list(owner)
