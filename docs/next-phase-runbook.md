@@ -19,6 +19,14 @@ uv run python -m edgemed.cli preflight
 
 ## Tests and demo
 
+Before running the full backend suite on a fresh checkout, provision the pinned model once online:
+
+```sh
+uv run python scripts/provision_assets.py --model-only
+```
+
+This works independently of the macOS launcher and server binary; see [Linux retrieval test setup](local-prototype.md#retrieval-tests-on-linux-mint--ubuntu). Tests do not silently download or skip a missing model.
+
 ```sh
 uv run pytest -q
 uv run ruff check edgemed tests scripts

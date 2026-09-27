@@ -27,7 +27,10 @@ MODEL_REVISION = "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
 def local_embedder(cache, threads=2):
     path = Path(cache) / "models--Qdrant--bge-small-en-v1.5-onnx-Q" / "snapshots" / MODEL_REVISION
     if not (path / "model_optimized.onnx").is_file():
-        raise RuntimeError("Pinned local embedding model is missing; provision verified assets first")
+        raise RuntimeError(
+            "Pinned local embedding model is missing. From the repository root, provision it online with: "
+            "uv run python scripts/provision_assets.py --model-only. Runtime will not download it."
+        )
     return TextEmbedding(
         MODEL, cache_dir=str(cache), local_files_only=True, threads=threads, specific_model_path=str(path)
     )

@@ -26,6 +26,28 @@ jobs:
         run: |
           uv run ruff check edgemed tests scripts
           uv run pytest -q tests/test_security_and_storage.py tests/test_governance_snapshots.py tests/test_next_phase.py
+  linux-retrieval:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SQLCipher build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential libsqlcipher-dev pkg-config
+      - name: Install locked dependencies
+        env:
+          CFLAGS: -I/usr/include/sqlcipher
+          LDFLAGS: -lsqlcipher
+        run: |
+          python -m pip install uv==0.12.19
+          uv sync --frozen
+      - name: Provision verified model assets only
+        run: uv run python scripts/provision_assets.py --model-only
+      - name: Full backend suite including real offline retrieval
+        run: |
+          uv run ruff check edgemed tests scripts
+          uv run pytest -q
   frontend:
     runs-on: ubuntu-latest
     steps:

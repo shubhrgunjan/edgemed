@@ -28,11 +28,27 @@ uv run python -m edgemed.cli preflight
 uv run python -m edgemed.cli start
 ```
 
-Provisioning explicitly downloads pinned public model and binary assets and checks their hashes. Runtime model loading uses the pinned local model path and has no download fallback. The committed asset manifest currently supports macOS ARM64 only. Do not substitute a Linux ARM wheel for an Android build.
+Provisioning explicitly downloads pinned public model and binary assets and checks their hashes. Runtime model loading uses the pinned local model path and has no download fallback. Full runtime provisioning, including the server binary, currently supports macOS ARM64 only. The pinned ONNX model can be provisioned separately for retrieval tests on Linux. Do not substitute a Linux ARM wheel for an Android build.
 
 Device A is at `http://127.0.0.1:8765`, Device B at `http://127.0.0.1:8766`. Retrieve the generated local password privately with `uv run python -m edgemed.cli credentials edge-a`. Do not include that output in logs, screenshots, tickets or commits.
 
 `stop` stops the services; `lock` stops them and unmounts the encrypted vault. Sign-out only hides the browser workspace. `backup --output /path/to/new-directory` stops services, unmounts the vault and copies/checksums its encrypted container. That backup requires the original Keychain material; portable key recovery is not implemented.
+
+## Retrieval tests on Linux Mint / Ubuntu
+
+Once `uv sync --frozen` succeeds, download and verify the pinned public model once while online:
+
+```sh
+uv run python scripts/provision_assets.py --model-only
+uv run ruff check edgemed tests scripts
+uv run pytest -q
+```
+
+If SQLCipher needs build prerequisites on a new machine, install `build-essential libsqlcipher-dev pkg-config`, set `CFLAGS="-I/usr/include/sqlcipher"` and `LDFLAGS="-lsqlcipher"`, then run `uv sync --frozen` again. Python 3.12 is required.
+
+The model cache is intentionally untracked; cloning/pulling the repository does not download it. `--model-only` verifies every model file against committed SHA-256 hashes and never installs the macOS server binary. Provisioning needs internet access; subsequent retrieval tests use only local assets. Both real-model tests remain enabled in the full suite and fail clearly when assets are missing. For an intentionally incomplete, model-free check, use `uv run pytest -q -m 'not integration'`.
+
+This supports the embedded retrieval test suite, not the encrypted application launcher: `setup`, `start`, and vault/Keychain operations still require macOS. It does not establish Linux production-runtime support.
 
 ## Verification
 

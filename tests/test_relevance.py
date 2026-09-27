@@ -3,6 +3,8 @@
 import secrets
 from pathlib import Path
 
+import pytest
+
 from edgemed.fixtures import NOTES
 from edgemed.models import CreateMemory
 from edgemed.retrieval import Retrieval
@@ -87,6 +89,7 @@ CASES = [
 ]
 
 
+@pytest.mark.integration
 def test_fifty_synthetic_paraphrases_find_expected_category(tmp_path):
     store = Store(tmp_path, secrets.token_hex(32))
     for note in NOTES:
