@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 packages = ["edgemed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: requires the cached ONNX model and native Qdrant Server"]
+markers = ["integration: requires the pinned local ONNX model and embedded Qdrant Edge"]
 [tool.ruff]
 line-length = 110
 [tool.ruff.lint]

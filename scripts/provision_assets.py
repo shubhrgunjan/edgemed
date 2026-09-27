@@ -1,5 +1,6 @@
 """Explicit online provisioning of pinned public assets. Runtime never downloads models."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -34,10 +35,17 @@ def download(url, path, expected):
         stage.unlink(missing_ok=True)
 
 
-def main():
-    if platform.system() != "Darwin" or platform.machine() != "arm64":
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model-only",
+        action="store_true",
+        help="Provision the portable pinned ONNX model without the macOS Qdrant server binary",
+    )
+    args = parser.parse_args(argv)
+    if not args.model_only and (platform.system() != "Darwin" or platform.machine() != "arm64"):
         raise RuntimeError(
-            "This asset manifest is verified for macOS ARM64; review a platform-specific manifest first"
+            "Full runtime assets support macOS ARM64 only. For retrieval tests, use --model-only."
         )
     manifest = json.loads((ROOT / "assets-manifest.json").read_text())
     for name, digest in manifest["files"].items():
@@ -48,6 +56,9 @@ def main():
                 ROOT / name,
                 digest,
             )
+    if args.model_only:
+        print("Pinned model assets verified; runtime records, keys and server binaries were not changed.")
+        return
     tools = ROOT / ".tools"
     tools.mkdir(exist_ok=True)
     binary = tools / "qdrant"
