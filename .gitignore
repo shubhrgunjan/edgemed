@@ -81,3 +81,35 @@ fastembed_cache/
 *~
 .DS_Store
 Thumbs.db
+
+# Local prototype runtime and credentials
+.venv/
+.cache/
+.tools/
+.runtime/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+frontend/node_modules/
+frontend/dist/
+test-results/
+.env
+*.key
+*.pem
+*.db*
+*.sparsebundle/
+.DS_Store
+
+.qdrant-initialized
+*.tsbuildinfo
+.env.*
+!.env.example
+
+# Also exclude local development symlinks and native scratch files
+.cache
+.tools
+frontend/node_modules
+*.ses

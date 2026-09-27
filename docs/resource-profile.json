@@ -1,0 +1,23 @@
+{
+  "idle_sample_seconds": 30.005052291991888,
+  "cpu_percent_definition": "100 percent is one logical core",
+  "processes": {
+    "qdrant": {
+      "rss_mib": 183.078125,
+      "idle_cpu_percent": 0.067
+    },
+    "central": {
+      "rss_mib": 232.46875,
+      "idle_cpu_percent": 0.167
+    },
+    "edge-a": {
+      "rss_mib": 420.171875,
+      "idle_cpu_percent": 0.233
+    },
+    "edge-b": {
+      "rss_mib": 260.046875,
+      "idle_cpu_percent": 0.2
+    }
+  },
+  "runtime_logical_bytes": 1133289082
+}

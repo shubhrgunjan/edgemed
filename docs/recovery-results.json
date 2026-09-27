@@ -1,0 +1,27 @@
+{
+  "encrypted_restore": "passed",
+  "scope": "same Mac with original Keychain material",
+  "profiles": {
+    "edge-a": {
+      "memories": 15,
+      "revisions": 29,
+      "outbox": 8,
+      "inbox": 13,
+      "events": 38
+    },
+    "edge-b": {
+      "memories": 7,
+      "revisions": 16,
+      "outbox": 5,
+      "inbox": 13,
+      "events": 23
+    },
+    "central": {
+      "memories": 2,
+      "revisions": 11,
+      "outbox": 0,
+      "inbox": 13,
+      "events": 11
+    }
+  }
+}

@@ -6,11 +6,7 @@ Thank you for your interest in contributing to **EdgeMed**! This document provid
 
 ## 1. Project Phase Notice
 
-> [!IMPORTANT]
-> The repository is currently in **PHASE 0: ARCHITECTURE & SPECIFICATION**.
-> During this phase:
-> - **DO NOT implement production code, frontend apps, or mock APIs.**
-> - Contributions must focus on refining documentation, data schemas, OpenAPI contracts, ADRs, test specifications, and architectural diagrams.
+The repository includes an explicitly authorized synthetic-data prototype. Implementation changes require relevant local tests and security regression checks. Preserve the architecture documents as design references and distinguish implemented behavior from roadmap work. See `docs/local-prototype.md` and `docs/next-phase-results.md`.
 
 ---
 
@@ -39,5 +35,5 @@ Every pull request and proposal must adhere to our core architectural principles
 ### 3.3 Pull Request Process
 1. Use the PR template in `.github/pull_request_template.md`.
 2. Ensure internal links in Markdown files are valid.
-3. Confirm no production implementation code has been introduced prematurely.
+3. Confirm that source changes include applicable validation and introduce no real clinical data or runtime secrets.
 4. Obtain review from Team LEX architectural leads.

@@ -1,4 +1,6 @@
 # EdgeMed: AI-Powered Edge Memory & Intelligence Platform
+
+> **Local prototype:** See [implementation status, local operation, validation, and remaining work](docs/local-prototype.md). The architecture documents below remain design references.
 ### *EdgeMed Memory Lab — Technical Repository Specification*
 
 [![Hackathon](https://img.shields.io/badge/Hackathon-Code%20Cubicle%206.0-blue.svg)](https://codecibicle6.devpost.com)

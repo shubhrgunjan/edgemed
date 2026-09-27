@@ -1,0 +1,25 @@
+{
+  "transport": "real authenticated HTTP loopback",
+  "workload": "isolated demo records, not 1k corpus",
+  "latency": {
+    "samples": 200,
+    "p50_ms": 2.848,
+    "p95_ms": 2.976,
+    "p99_ms": 3.057,
+    "max_ms": 3.379
+  },
+  "stage_p50_ms": {
+    "normalize": 0.000375,
+    "embedding": 2.0141665,
+    "lock_wait": 0.000375,
+    "canonical_and_lexical_prepare": 0.000833,
+    "dense_local": 0.0244165,
+    "dense_reference": 0.0979585,
+    "keyword": 0.009334,
+    "fusion": 0.014292,
+    "payload": 0.0272915,
+    "serialization": 0.0258330037468113,
+    "handler_total": 2.245916999527253
+  },
+  "server_request_p50_ms": 2.580437001597602
+}
