@@ -19,6 +19,7 @@ from .security import password_valid, issue_session
 from .store import Store
 from .sync import Transport
 from .governance import evaluate
+from .accounts import scopes, record_owner
 
 
 def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval):
@@ -144,11 +145,27 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
         )
 
     def owner(request):
-        return request.state.identity["owner"]
+        return scopes(request.state.identity)
+
+    def own_scope(request, privacy):
+        return record_owner(request.state.identity, privacy)
+
+    def authorized_record(mid, request):
+        for scope in owner(request):
+            try:
+                return store.get(mid, scope), scope
+            except KeyError:
+                continue
+        raise KeyError("Memory not found")
 
     def admin(request):
         if request.state.identity.get("role") != "admin":
             raise HTTPException(403, "Administrator permission required")
+
+    def system_admin(request):
+        admin(request)
+        if request.state.identity["username"] != "operator":
+            raise HTTPException(403, "Server operator permission required")
 
     @app.get("/api/health")
     def health():
@@ -166,7 +183,7 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
         candidate_hash = (
             user["password_hash"] if user else next(iter(secret["operators"].values()))["password_hash"]
         )
-        if not password_valid(candidate_hash, data.password) or not user:
+        if not password_valid(candidate_hash, data.password) or not user or user.get("disabled"):
             raise HTTPException(401, "Invalid credentials")
         token, csrf, expires = issue_session()
         with auth_lock:
@@ -181,7 +198,7 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
                 "last_active": time.monotonic(),
                 "identity": {"username": data.username, "owner": user["owner"], "role": user["role"]},
             }
-        response = JSONResponse({"csrf": csrf, "username": data.username})
+        response = JSONResponse({"csrf": csrf, "username": data.username, "role": user["role"]})
         response.set_cookie(
             "edgemed_session",
             token,
@@ -194,7 +211,11 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
 
     @app.get("/api/session")
     def session(request: Request):
-        return {"csrf": request.state.session["csrf"], "username": request.state.identity["username"]}
+        return {
+            "csrf": request.state.session["csrf"],
+            "username": request.state.identity["username"],
+            "role": request.state.identity["role"],
+        }
 
     @app.post("/api/session/activity")
     def user_activity(request: Request):
@@ -214,6 +235,9 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
         return {
             "device": store.device,
             "synthetic_only": True,
+            "deployment": "hospital_lan" if config.get("lan_mode") else "local",
+            "workspace": request.state.identity["owner"],
+            "role": request.state.identity["role"],
             "generation": store.generation,
             **store.stats(owner(request)),
             "model": MODEL,
@@ -234,38 +258,51 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
 
     @app.post("/api/memories", status_code=201)
     def create(data: CreateMemory, request: Request):
-        return store.create(data, owner(request))
+        return store.create(data, own_scope(request, data.privacy))
 
     @app.get("/api/memories/{mid}")
     def get(mid: UUID, request: Request):
-        return store.get(str(mid), owner(request))
+        memory = authorized_record(str(mid), request)[0]
+        if config.get("lan_mode") and not memory["fixture"]:
+            memory["reason"] = (
+                "Personal observation visible only to this staff account on the server."
+                if memory["privacy"] == "HIGHLY_SENSITIVE"
+                else "Workspace observation visible to authorized staff on this server."
+            )
+        return memory
 
     @app.get("/api/memories/{mid}/governance")
     def governance(mid: UUID, request: Request):
-        return evaluate(store.get(str(mid), owner(request)))
+        return evaluate(authorized_record(str(mid), request)[0])
 
     @app.post("/api/memories/{mid}/revisions", status_code=201)
     def revise(mid: UUID, data: Revision, request: Request):
-        return store.revise(str(mid), [str(data.parent)], data.content, owner=owner(request))
+        memory, scope = authorized_record(str(mid), request)
+        if memory["fixture"]:
+            raise HTTPException(403, "Reference changes require administrator permission")
+        return store.revise(str(mid), [str(data.parent)], data.content, owner=scope)
 
     @app.post("/api/memories/{mid}/reference-variant", status_code=201)
     def reference_variant(mid: UUID, data: FixtureRevision, request: Request):
         admin(request)
-        memory = store.get(str(mid), owner(request))
+        memory, scope = authorized_record(str(mid), request)
         if not memory["fixture"]:
             raise HTTPException(409, "Only reviewed references accept variants")
-        return store.revise(str(mid), [str(data.parent)], variant=data.variant, owner=owner(request))
+        return store.revise(str(mid), [str(data.parent)], variant=data.variant, owner=scope)
 
     @app.post("/api/memories/{mid}/resolve")
     def resolve(mid: UUID, data: Resolve, request: Request):
         admin(request)
-        return store.resolve(str(mid), list(map(str, data.parents)), str(data.chosen), owner(request))
+        _, scope = authorized_record(str(mid), request)
+        return store.resolve(str(mid), list(map(str, data.parents)), str(data.chosen), scope)
 
     @app.delete("/api/memories/{mid}")
     def delete(mid: UUID, request: Request):
-        m = store.get(str(mid), owner(request))
+        m, scope = authorized_record(str(mid), request)
+        if scope != f"personal:{request.state.identity['username']}":
+            admin(request)
         return store.revise(
-            str(mid), m["heads"], variant=0 if m["fixture"] else None, owner=owner(request), deleted=True
+            str(mid), m["heads"], variant=0 if m["fixture"] else None, owner=scope, deleted=True
         )
 
     @app.post("/api/search")
@@ -308,11 +345,11 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
     @app.get("/api/activity")
     def activity(request: Request):
         admin(request)
-        return store.activity()
+        return store.activity(owner(request))
 
     @app.get("/api/sync/status")
     def sync_status(request: Request):
-        admin(request)
+        system_admin(request)
         return (
             transport.status()
             if transport
@@ -321,13 +358,13 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
 
     @app.post("/api/sync/transport")
     def sync_state(data: TransportState, request: Request):
-        admin(request)
+        system_admin(request)
         store.set_setting("transport", data.enabled)
         return {"enabled": data.enabled}
 
     @app.post("/api/sync")
     def sync_now(request: Request):
-        admin(request)
+        system_admin(request)
         if transport:
             transport.run()
             return transport.status()
@@ -335,7 +372,7 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
 
     @app.post("/api/sync/reference-snapshot")
     def reference_snapshot(request: Request):
-        admin(request)
+        system_admin(request)
         if not transport:
             raise HTTPException(503, "Central node not configured")
         from .snapshots import fetch
@@ -365,13 +402,15 @@ def create_app(config, secret, cache, frontend=None, retrieval_factory=Retrieval
     @app.post("/api/demo/seed")
     def seed(request: Request):
         admin(request)
-        if store.get_setting("seeded:" + owner(request), False):
+        workspace = request.state.identity["owner"]
+        if store.get_setting("seeded:" + workspace, False):
             return {"seeded": False}
         for data in NOTES:
-            store.create(CreateMemory(**data), owner(request))
-        for name in REFERENCES:
-            store.seed_reference(name, owner(request))
-        store.set_setting("seeded:" + owner(request), True)
+            store.create(CreateMemory(**data), workspace)
+        if workspace == "operator":
+            for name in REFERENCES:
+                store.seed_reference(name, workspace)
+        store.set_setting("seeded:" + workspace, True)
         return {"seeded": True}
 
     @app.get("/api/contract")

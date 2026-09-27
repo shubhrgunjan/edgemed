@@ -21,7 +21,7 @@ test('capture, search, inspect, delete and truthful sharing', async ({ page }) =
   await expect(page.getByText(/ms backend/)).toBeVisible();
   await page.getByText('Persistent cough and fever', { exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Memory inspector' })).toBeVisible();
-  await expect(page.getByText('Kept on this device', { exact: true })).toBeVisible();
+  await expect(page.getByText('Shared in workspace', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Add observation', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Browser verification observation');

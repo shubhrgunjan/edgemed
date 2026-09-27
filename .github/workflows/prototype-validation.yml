@@ -25,7 +25,7 @@ jobs:
       - name: Static and security regression checks
         run: |
           uv run ruff check edgemed tests scripts
-          uv run pytest -q tests/test_security_and_storage.py tests/test_governance_snapshots.py tests/test_next_phase.py
+          uv run pytest -q tests/test_security_and_storage.py tests/test_governance_snapshots.py tests/test_next_phase.py tests/test_hospital_lan.py::test_lan_certificate_is_explicit_private_and_bound_to_one_ip
   linux-retrieval:
     runs-on: ubuntu-24.04
     steps:
