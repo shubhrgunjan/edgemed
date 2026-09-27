@@ -1,0 +1,16 @@
+{
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "records": 1000,
+  "queries": 30,
+  "unique_query_templates": 5,
+  "evaluation_note": "Repeated synthetic categories; measures operation and template retrieval, not held-out clinical quality.",
+  "durable_ingestion_seconds": 0.154,
+  "indexing_seconds": 43.349,
+  "search_p50_ms": 15.15,
+  "search_p95_ms": 23.69,
+  "search_max_ms": 23.72,
+  "template_hit_at_5": 1.0,
+  "process_peak_rss_mb": 263.6,
+  "network_mode": "local model and Edge only",
+  "model": "BAAI/bge-small-en-v1.5"
+}
