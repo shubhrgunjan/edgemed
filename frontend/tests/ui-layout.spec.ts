@@ -51,6 +51,9 @@ test('app layout remains usable across themes, views, and widths', async ({ page
   await expect(page.getByRole('button', { name: 'Add observation', exact: true })).toBeFocused();
   await page.getByText('Persistent cough and fever', { exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Memory inspector' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close Memory inspector' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByText('Archive / deletion')).toBeFocused();
   await page.screenshot({ path: path.resolve(process.cwd(), '../test-results/ui-inspector-mocha.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Sharing & activity', exact: true }).click();

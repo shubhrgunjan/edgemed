@@ -14,7 +14,10 @@ export function Dialog({ title, heading, onClose, children, closeOnBackdrop = fa
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     const root = ref.current!;
-    const controls = () => Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]),input,textarea,select,[tabindex="0"]'));
+    const controls = () => Array.from(root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),summary,[tabindex="0"]'
+    )).filter(element => element.getClientRects().length > 0 &&
+      (element.tagName === 'SUMMARY' || !element.closest('details:not([open])')));
     controls()[0]?.focus();
     function key(e: KeyboardEvent) {
       if (e.key === 'Escape') { e.preventDefault(); closeRef.current(); }
