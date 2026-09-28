@@ -1,72 +1,19 @@
-# Security Policy and Threat Model
+# EdgeMed security scope
 
-- **Document Version:** 1.0.0
-- **Status:** Complete / Active Security Baseline
-- **Date:** 2026-09-26
-- **Lead Security Architect:** Team LEX (Code Cubicle 6.0 — PS03)
+EdgeMed is a **synthetic-data research prototype**. Do not enter real patient information, credentials from a clinical system, or other regulated data. It has not had an independent security audit or clinical validation and is not approved for medical use.
 
----
+## Implemented boundaries
 
-## 1. Safety and Clinical Status Disclaimer
+- The macOS launcher requires an encrypted sparsebundle and stores application secrets in the macOS Keychain. On Linux, the experimental launcher refuses to start unless its vault is an exact, private LUKS2 mount backed by the configured mapper; it also requires an unlocked system Secret Service or KWallet keyring. It does not select a plaintext keyring backend.
+- The canonical SQLite store uses SQLCipher. The local vector index, TLS materials, configuration, and logs live inside the verified encrypted volume. Runtime search uses verified, pinned local model assets and makes no model download request.
+- API authentication, CSRF/origin checks, session expiry, server-side workspace scoping, and personal-record scoping are covered by tests. Only reviewed synthetic reference variants enter the optional sync queue; staff observations do not.
+- Private-LAN access is explicit: the operator provisions a certificate for one private IP, and only Edge A can bind there. Other services remain on loopback. A firewall and trusted client certificate store are still operator responsibilities.
+- The public browser demo is static and separate. It has no backend, account, or persistent note storage; notes added there vanish on refresh. It is unsuitable for sensitive data.
 
-> [!CAUTION]
-> **EdgeMed is a TECHNICAL DEMONSTRATION / DECISION-SUPPORT RESEARCH PROTOTYPE.**
-> It is strictly designed for technical evaluation and hackathon judging under Code Cubicle 6.0 (Problem Statement 03). It is **not** a certified medical device (FDA 510(k), CE mark, or HIPAA-certified software).
-> All test fixtures and sample data are 100% synthetic. Real clinical Protected Health Information (PHI) or Personally Identifiable Information (PII) must never be loaded into this prototype.
+## Known limits
 
----
+The Linux path has automated native-asset and fail-closed tests, but still needs a physical encrypted-host rehearsal, outage test, and recovery test. On Linux, the operator must stop services and unmount the LUKS volume with system tooling; the macOS `lock` and cold-backup commands do not apply. The current key management lacks a portable recovery/rotation workflow, and an unlocked host can read its mounted vault. There is no whole-volume rollback protection, high availability, hospital identity-provider integration, emergency access workflow, or verified clinical safety process. See the [roadmap](TODO.md).
 
-## 2. Threat Model
+## Reporting a vulnerability
 
-Edge devices deployed in decentralized environments (e.g., field clinics, ambulances, remote triage stations) operate outside physically secure data centers. Consequently, the threat surface includes both traditional network vectors and physical hardware tampering.
-
-```
-                                THREAT MODEL BOUNDARY
- ┌─────────────────────────────────────────────────────────────────────────────────┐
- │                                EDGE DEVICE                                      │
- │                                                                                 │
- │  ┌───────────────────────┐   Local IPC    ┌──────────────────────────────────┐  │
- │  │      Operator UI      │◄──────────────►│    EdgeMed Backend (FastAPI)     │  │
- │  └───────────────────────┘                └─────────────────┬────────────────┘  │
- │                                                             │                   │
- │           [ Threat: Compromised Device / Storage Dump ]     │                   │
- │                                                             ▼                   │
- │                   ┌──────────────────────────────────────────────────┐          │
- │                   │  Local Encrypted Storage (Qdrant Edge + SQLite)  │          │
- │                   └──────────────────────────────────────────────────┘          │
- │                                                             │                   │
- │                                                             ▼                   │
- │                                            ┌─────────────────────────────────┐  │
- │                                            │   PRIVACY FIREWALL & GOVERNOR   │  │
- │                                            └────────────────┬────────────────┘  │
- └─────────────────────────────────────────────────────────────┼───────────────────┘
-                                                               │
-                          [ Threat: Man-in-the-Middle Link ]   │  mTLS Encrypted Sync
-                          [ Threat: Malicious Sync Payload ]   │
-                                                               ▼
-                                              ┌─────────────────────────────────┐
-                                              │      CENTRAL QDRANT SERVER      │
-                                              └─────────────────────────────────┘
-```
-
-### Detailed Threat Analysis and Mitigations
-
-| Threat ID | Threat Vector | Impact | Planned Mitigation in Architecture |
-| :--- | :--- | :--- | :--- |
-| **THREAT-01** | **Physical Device Compromise / Lost Hardware** | Unauthorized extraction of local vector embeddings and SQLite clinical notes from disk. | Local storage directory encryption via LUKS / SQLCipher; sensitive vector payloads stored as non-reversible embeddings with separate keyed pseudonymization tables. |
-| **THREAT-02** | **Data Leakage during Cloud Sync** | Accidental broadcast of identifiable patient notes across public hospital networks. | **Privacy Firewall**: Strict four-tier classification (`PUBLIC`, `INTERNAL`, `SENSITIVE`, `HIGHLY_SENSITIVE`). `HIGHLY_SENSITIVE` records are blocked from sync; `SENSITIVE` records are stripped of identifiers before entering the outbound sync queue. |
-| **THREAT-03** | **Malicious Synchronization Payload** | An attacker injects corrupted clinical guidelines, false contraindications, or poisoned embeddings via the central server sync stream. | Cryptographic signature verification on incoming snapshots; strict Pydantic schema validation; point provenance verification before merging into local knowledge graph. |
-| **THREAT-04** | **Prompt Injection via Ingested Documents** | Adversarial text embedded in imported medical notes attempts to hijack downstream local LLM or extraction pipelines. | Context isolation; structured schema parsing before LLM handoff; prompt boundaries with delimited text blocks; strict prohibition of raw executable eval. |
-| **THREAT-05** | **Memory Tampering & Historical Alteration** | Malicious or accidental modification of past clinical findings to hide medical malpractice or diagnostic error. | **Cryptographic Provenance DAG**: Append-only event journaling in SQLite; content hashing (SHA-256) of observation records; changes create new superseding nodes rather than overwriting historical records. |
-| **THREAT-06** | **Stale Information Propagation** | An edge device disconnected for months reconnects and pushes outdated clinical protocols that overwrite recent hospital findings. | Vector-clock and timestamped versioning in `SyncRecord`; Memory Governor rejects stale lower-version updates; conflicts trigger `REQUIRES_REVIEW` state. |
-| **THREAT-07** | **Conflicting Medical Updates** | Divergent clinical observations from multiple edge devices create clinical ambiguity (e.g., conflicting drug dosages). | **Contradiction Lifecycle State Machine**: System detects opposing assertions, creates explicit `CONTRADICTS` graph edges, and presents both records side-by-side in the Memory Lab for clinician adjudication. |
-
----
-
-## 3. Vulnerability Reporting Procedure
-
-If you discover a security vulnerability or privacy boundary defect within this repository:
-1. **Do not create a public GitHub issue.**
-2. Send a detailed vulnerability report to Team LEX security leads via encrypted channel or contact team maintainers directly.
-3. Include reproduction steps, affected schemas/endpoints, and potential impact assessment.
-4. The team will acknowledge receipt within 48 hours and coordinate remediation before disclosure.
+Contact the repository maintainers privately with reproduction steps, affected version, and impact. Do not publish exploit details in a public issue before maintainers can investigate. Avoid including real patient data in any report.

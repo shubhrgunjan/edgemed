@@ -18,10 +18,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 
 from .security import SERVICE, PASSWORDS, load_secret, save_secret, new_identity, private_write
+from .platforms import target
 
 PROJECT = Path(__file__).resolve().parent.parent
+DEFAULT_RUNTIME = (
+    Path.home() / "Library/Application Support/EdgeMed Local"
+    if sys.platform == "darwin"
+    else Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "edgemed"
+)
 RUNTIME = (
-    Path(os.environ.get("EDGEMED_RUNTIME", Path.home() / "Library/Application Support/EdgeMed Local"))
+    Path(os.environ.get("EDGEMED_RUNTIME", DEFAULT_RUNTIME))
     .expanduser()
     .resolve()
 )
@@ -34,6 +40,10 @@ VAULT = RUNTIME / "vault"
 
 
 def mount_vault():
+    target()
+    if sys.platform == "linux":
+        verify_vault()
+        return
     import keyring
     import secrets
 
@@ -83,6 +93,13 @@ def mount_vault():
 
 
 def verify_vault():
+    target()
+    if sys.platform == "linux":
+        from .linux_vault import verify_luks_mount
+
+        return verify_luks_mount(VAULT)
+    if sys.platform != "darwin":
+        raise RuntimeError("Only macOS and Linux 64-bit launchers are supported")
     import plistlib
 
     info = plistlib.loads(subprocess.check_output(["hdiutil", "info", "-plist"]))
@@ -414,6 +431,8 @@ def main():
     elif args.command == "stop":
         stop()
     elif args.command == "lock":
+        if sys.platform != "darwin":
+            parser.error("On Linux, stop EdgeMed and unmount the LUKS vault using your system tooling")
         stop()
         subprocess.run(["hdiutil", "detach", str(VAULT)], check=True)
         print("Services stopped and encrypted vault unmounted.")
@@ -426,6 +445,8 @@ def main():
 
         if not args.output:
             parser.error("backup requires --output (a new directory)")
+        if sys.platform != "darwin":
+            parser.error("Linux backup requires an offline LUKS volume snapshot; see installation guide")
         stop()
         if VAULT.is_mount():
             subprocess.run(["hdiutil", "detach", str(VAULT)], check=True)

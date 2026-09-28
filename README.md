@@ -12,8 +12,8 @@ The public link opens a **synthetic, browser-only sample**: keyword search, capt
 
 | Area | Current prototype |
 | --- | --- |
-| Local operation | A macOS ARM64 server keeps serving over loopback or a private LAN without internet, while its power and LAN remain available. |
-| Protected storage | A macOS encrypted sparsebundle holds the SQLCipher database and local Qdrant index. Keys are held in the Keychain. |
+| Local operation | macOS ARM64 has a live synthetic-data rehearsal. macOS Intel and Linux x86-64/ARM64 have experimental launcher paths that still need physical encrypted-host rehearsals. Any host needs power and a working local network for browser clients. |
+| Protected storage | macOS uses an encrypted sparsebundle and Keychain. Linux requires an operator-mounted LUKS2 volume and an unlocked Secret Service/KWallet keyring; no plaintext fallback. |
 | Search | Pinned local embeddings, lexical retrieval, and workspace-aware access checks. Model assets are downloaded and hash-verified during setup, never fetched by runtime search. |
 | Staff demo | Separate synthetic-data accounts, shared workspace notes, creator-only personal notes, private-IP HTTPS, and server-side authorization. |
 | Optional sharing | Only reviewed synthetic reference variants enter the demo synchronization path. Staff observations do not. |
@@ -33,7 +33,7 @@ The [full task list](TODO.md) separates security gates, Android work, and scale 
 
 ## Install the full local app
 
-The supported encrypted launcher and LAN demo currently require **macOS ARM64**, Python 3.12, `uv`, Node.js 22+, Xcode command-line tools, and Homebrew SQLCipher. Start with a fresh clone:
+For the macOS launcher, use **Apple Silicon or Intel**, Python 3.12, `uv`, Node.js 22+, Xcode command-line tools, and Homebrew SQLCipher. Start with a fresh clone:
 
 ```sh
 git clone https://github.com/shubhrgunjan/edgemed.git
@@ -48,7 +48,11 @@ uv run python -m edgemed.cli setup
 uv run python -m edgemed.cli start
 ```
 
-Open **http://127.0.0.1:8765** on that Mac. `setup` provisions the encrypted vault and local operator account. The asset provisioning step needs internet once; normal local capture and search do not. For passwords, staff accounts, private-LAN certificates, firewall boundaries, backups, and Linux test-only setup, follow the [installation guide](docs/installation.md). Do not expose the local server to the public internet.
+Open **http://127.0.0.1:8765** on that Mac. `setup` provisions the encrypted vault and local operator account. The asset provisioning step needs internet once; normal local capture and search do not. For passwords, staff accounts, private-LAN certificates, firewall boundaries, and backups, follow the [macOS installation guide](docs/installation.md). For **Linux x86-64 or ARM64**, follow the separate [encrypted Linux setup](docs/linux-installation.md); it needs a pre-mounted LUKS2 volume and protected system keyring. Do not expose the local server to the public internet.
+
+The lockfile selects ONNX Runtime 1.23.2 on macOS Intel because newer pinned releases lack an Intel wheel, and 1.30.0 on Apple Silicon and 64-bit Linux. CI runs real offline retrieval on all four targets; encrypted-vault setup still needs a physical-host rehearsal on the new targets.
+
+32-bit x86 and ARM are **not supported** by this runtime: the pinned [Qdrant Edge](https://pypi.org/project/qdrant-edge-py/0.8.0/#files) and [ONNX Runtime](https://pypi.org/project/onnxruntime/1.23.2/#files) releases do not publish the required 32-bit native wheels. A browser on a 32-bit device can still access a 64-bit LAN server if its browser supports the interface. The Linux launcher and macOS Intel path need physical-host end-to-end rehearsal before operational use.
 
 ## Verify and explore
 
@@ -58,7 +62,7 @@ uv run pytest -q
 (cd frontend && npm run build && npm run build:demo)
 ```
 
-The full Linux retrieval suite needs `uv run python scripts/provision_assets.py --model-only` first. The public demo can be built from `frontend` with `npm run build:demo`; its output is `frontend/dist-demo/` and contains only static assets. The measured results and limitations are recorded in [next-phase validation](docs/next-phase-results.md) and [hospital LAN verification](docs/hospital-lan-results.md).
+For Linux retrieval tests without the server, run `uv run python scripts/provision_assets.py --model-only` first. A full 64-bit install provisions the verified native Qdrant binary as well. The public demo can be built from `frontend` with `npm run build:demo`; its output is `frontend/dist-demo/` and contains only static assets. The measured results and limitations are recorded in [next-phase validation](docs/next-phase-results.md) and [hospital LAN verification](docs/hospital-lan-results.md).
 
 ## Safety and project state
 

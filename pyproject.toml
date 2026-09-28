@@ -7,7 +7,9 @@ dependencies = [
   "fastapi==0.141.1", "uvicorn[standard]==0.54.0", "qdrant-edge-py==0.8.0",
   "fastembed==0.8.1", "sqlcipher3==0.6.2", "cryptography==50.0.1",
   "argon2-cffi==25.1.0", "httpx==0.28.1", "keyring==25.7.0",
-  "qdrant-client==1.19.1", "portalocker==3.2.0"
+  "qdrant-client==1.19.1", "portalocker==3.2.0",
+  "onnxruntime==1.23.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "onnxruntime==1.30.0; sys_platform != 'darwin' or platform_machine != 'x86_64'"
 ]
 [dependency-groups]
 dev = ["pytest==9.1.1", "pytest-cov==7.1.0", "ruff==0.16.9", "pip-audit==2.10.1"]

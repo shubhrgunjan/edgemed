@@ -4,7 +4,10 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+from .platforms import target
 
 
 def file_hash(path):
@@ -29,6 +32,10 @@ def preflight(project):
         path = project / relative
         if not path.is_file() or file_hash(path) != expected:
             raise RuntimeError(f"Asset missing or checksum mismatch: {relative}")
+    binary = project / ".tools/qdrant"
+    expected_binary = manifest["qdrant_binaries"][target()]["binary_sha256"]
+    if not binary.is_file() or file_hash(binary) != expected_binary:
+        raise RuntimeError("Pinned Qdrant binary missing or checksum mismatch for this platform")
     if not (project / "frontend/dist/index.html").is_file():
         raise RuntimeError("Build frontend before starting")
     for profile in ("edge-a", "edge-b", "central"):
@@ -38,14 +45,16 @@ def preflight(project):
     return {
         "vault": "encrypted and mounted",
         "profiles": 3,
-        "asset_hashes": len(manifest["files"]),
+        "asset_hashes": len(manifest["files"]) + 1,
         "frontend": "built",
         "network_access": "not required",
-        "platform": "macOS",
+        "platform": target(),
     }
 
 
 def cold_backup(image, destination):
+    if sys.platform != "darwin":
+        raise RuntimeError("Linux backup needs an offline LUKS volume snapshot; this command supports macOS only")
     import plistlib
 
     info = plistlib.loads(subprocess.check_output(["hdiutil", "info", "-plist"]))

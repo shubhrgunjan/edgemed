@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import time
 from pathlib import Path
 
@@ -13,6 +14,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 PASSWORDS = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 SERVICE = os.environ.get("EDGEMED_KEYCHAIN_SERVICE", "org.lex.edgemed.local")
+
+
+def protected_keyring():
+    import keyring
+
+    if sys.platform == "linux":
+        backend = keyring.get_keyring()
+        module = type(backend).__module__
+        if module not in {"keyring.backends.SecretService", "keyring.backends.kwallet"}:
+            raise RuntimeError("Linux requires an unlocked Secret Service or KWallet keyring; plaintext fallback is disabled")
+    return keyring
 
 
 def canonical(value):
@@ -43,8 +55,7 @@ def new_identity():
 
 
 def load_secret(profile):
-    import keyring
-
+    keyring = protected_keyring()
     value = keyring.get_password(SERVICE, profile)
     if value is None:
         raise RuntimeError("Keychain material unavailable. Run setup; plaintext fallback is disabled.")
@@ -52,8 +63,7 @@ def load_secret(profile):
 
 
 def save_secret(profile, data):
-    import keyring
-
+    keyring = protected_keyring()
     keyring.set_password(SERVICE, profile, json.dumps(data))
 
 
