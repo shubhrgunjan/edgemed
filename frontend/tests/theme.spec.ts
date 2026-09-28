@@ -15,6 +15,7 @@ test('local interface supports Latte and Mocha and remembers the switch', async 
   await toggle.click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'mocha');
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await page.waitForTimeout(200);
   await page.screenshot({ path: path.resolve(process.cwd(), '../test-results/login-mocha.png'), fullPage: true });
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'mocha');

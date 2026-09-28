@@ -40,6 +40,8 @@ test('public sample uses only local assets, keeps notes ephemeral, and switches 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: path.resolve(process.cwd(), '../test-results/public-demo-mobile.png'), fullPage: true });
+  await page.setViewportSize({ width: 320, height: 700 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.reload();
   await expect(page.getByText('Invented demo note', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(localStorage))).toEqual(['edgemed-theme']);

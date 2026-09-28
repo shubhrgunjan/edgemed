@@ -23,6 +23,36 @@
   --ctp-crust: #dce0e8;
   --ctp-accent: var(--ctp-mauve);
   --ctp-on-accent: var(--ctp-base);
+  --bg-canvas: var(--ctp-base);
+  --bg-surface: var(--ctp-mantle);
+  --bg-surface-raised: var(--ctp-base);
+  --bg-subtle: var(--ctp-crust);
+  --border-subtle: var(--ctp-surface-1);
+  --border-strong: var(--ctp-surface-2);
+  --text-primary: var(--ctp-text);
+  --text-secondary: var(--ctp-subtext-1);
+  --text-muted: var(--ctp-subtext-0);
+  --accent: var(--ctp-mauve);
+  --accent-hover: color-mix(in srgb, var(--ctp-mauve) 86%, var(--ctp-text));
+  --accent-soft: color-mix(in srgb, var(--ctp-mauve) 11%, var(--ctp-base));
+  --success: var(--ctp-green);
+  --warning: var(--ctp-peach);
+  --danger: var(--ctp-red);
+  --info: var(--ctp-blue);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-small: 6px;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+  --control-height: 40px;
+  --control-height-large: 44px;
+  --transition-fast: 150ms ease;
 }
 :root[data-theme='mocha'] {
   color-scheme: dark;
@@ -47,4 +77,20 @@
   --ctp-crust: #11111b;
   --ctp-accent: var(--ctp-mauve);
   --ctp-on-accent: var(--ctp-base);
+  --bg-canvas: var(--ctp-base);
+  --bg-surface: var(--ctp-mantle);
+  --bg-surface-raised: var(--ctp-surface-0);
+  --bg-subtle: var(--ctp-mantle);
+  --border-subtle: var(--ctp-surface-1);
+  --border-strong: var(--ctp-surface-2);
+  --text-primary: var(--ctp-text);
+  --text-secondary: var(--ctp-subtext-1);
+  --text-muted: var(--ctp-subtext-0);
+  --accent: var(--ctp-mauve);
+  --accent-hover: color-mix(in srgb, var(--ctp-mauve) 84%, var(--ctp-text));
+  --accent-soft: color-mix(in srgb, var(--ctp-mauve) 12%, var(--ctp-base));
+  --success: var(--ctp-green);
+  --warning: var(--ctp-peach);
+  --danger: var(--ctp-red);
+  --info: var(--ctp-blue);
 }
