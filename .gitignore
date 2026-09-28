@@ -83,25 +83,17 @@ fastembed_cache/
 Thumbs.db
 
 # Local prototype runtime and credentials
-.venv/
-.cache/
 .tools/
 .runtime/
-__pycache__/
-*.pyc
-.pytest_cache/
 .ruff_cache/
-.coverage
 htmlcov/
-frontend/node_modules/
 frontend/dist/
+frontend/dist-demo/
 test-results/
-.env
 *.key
 *.pem
 *.db*
 *.sparsebundle/
-.DS_Store
 
 .qdrant-initialized
 *.tsbuildinfo
