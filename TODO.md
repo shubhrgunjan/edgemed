@@ -9,6 +9,7 @@ EdgeMed currently supports **synthetic-data demonstrations only**. These tasks a
 - [ ] Replace demo account provisioning with a hospital identity provider, least-privilege roles, stronger session controls, account recovery, and an emergency-access process with audited review.
 - [ ] Design portable, recoverable encryption keys with rotation, device replacement, cold restore, and tested disaster recovery; address whole-volume rollback detection.
 - [ ] Create a supported hospital-local server deployment with OS hardening, hospital-managed TLS, network segmentation, monitored backups, logging without sensitive content, and documented update/rollback procedures.
+- [ ] Rehearse the experimental Linux x86-64/ARM64 launcher on physical LUKS2 hosts, including keyring restart, LAN outage, offline backup, and verified restore; repeat the macOS Intel path on physical Intel hardware.
 - [ ] Decide availability targets and design a redundant server/failover path. Test power, disk, LAN, and server failure rather than assuming a single Mac is sufficient.
 - [ ] Publish a data-flow diagram and test that no private note, embedding, credential, or search query leaves the intended trust boundary.
 

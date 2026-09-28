@@ -2,12 +2,33 @@
   "model": "BAAI/bge-small-en-v1.5",
   "qdrant_server": "1.19.1",
   "files": {
-    ".tools/qdrant": "967ce05dac592ede582072f0c335f3c2d095dfe4dd21ab370b89d7d9158d6cc4",
     ".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/aa8f8b060edb00e03bfdd08813a2949946c8ba55/model_optimized.onnx": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431",
     ".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/aa8f8b060edb00e03bfdd08813a2949946c8ba55/tokenizer_config.json": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53",
     ".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/aa8f8b060edb00e03bfdd08813a2949946c8ba55/special_tokens_map.json": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a",
     ".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/aa8f8b060edb00e03bfdd08813a2949946c8ba55/config.json": "13582bcf2effc85b7bf3d3f5532e686bc1c9ce86bb009d10f0ec33cbe92299dd",
     ".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/aa8f8b060edb00e03bfdd08813a2949946c8ba55/tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
   },
-  "model_revision": "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
+  "model_revision": "aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+  "qdrant_binaries": {
+    "macos-arm64": {
+      "archive": "qdrant-aarch64-apple-darwin.tar.gz",
+      "archive_sha256": "e060209dfefc9d977ddcec48521349f505f8fd1ce21f2a3db444140870522fe4",
+      "binary_sha256": "967ce05dac592ede582072f0c335f3c2d095dfe4dd21ab370b89d7d9158d6cc4"
+    },
+    "macos-x86_64": {
+      "archive": "qdrant-x86_64-apple-darwin.tar.gz",
+      "archive_sha256": "ba7cbada9a90aefdbd7f92de4e093cd25328206bd65e9e96657bd6133d272637",
+      "binary_sha256": "9bb97320a447367fc9d1e2780255a8d8efdbb9d36de0eecfa7b65879aedd8a5d"
+    },
+    "linux-x86_64": {
+      "archive": "qdrant-x86_64-unknown-linux-gnu.tar.gz",
+      "archive_sha256": "eef986e769d4d3e806dd2d546e1b4ecdd416211e54d34b4ed764fac7c58e1085",
+      "binary_sha256": "f1823c24376c4a5f2f665d42dc2f52fe4e537e7c2b070b8ae7da575d83327e3a"
+    },
+    "linux-arm64": {
+      "archive": "qdrant-aarch64-unknown-linux-musl.tar.gz",
+      "archive_sha256": "0e607c11705fab22f7d667f4749bc0b6b60a8fa9e91de71880a6ebafbbda1b26",
+      "binary_sha256": "9c39363d33631b16b12e59a715d3d85e965c5f7795e907874ef0a44a052a8b58"
+    }
+  }
 }

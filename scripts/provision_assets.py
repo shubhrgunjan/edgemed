@@ -4,15 +4,17 @@ import argparse
 import hashlib
 import json
 import os
-import platform
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from edgemed.platforms import target  # noqa: E402
+
 REVISION = "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
-ARCHIVE_HASH = "e060209dfefc9d977ddcec48521349f505f8fd1ce21f2a3db444140870522fe4"
 
 
 def download(url, path, expected):
@@ -40,14 +42,13 @@ def main(argv=None):
     parser.add_argument(
         "--model-only",
         action="store_true",
-        help="Provision the portable pinned ONNX model without the macOS Qdrant server binary",
+        help="Provision the pinned ONNX model without a native Qdrant server binary",
     )
     args = parser.parse_args(argv)
-    if not args.model_only and (platform.system() != "Darwin" or platform.machine() != "arm64"):
-        raise RuntimeError(
-            "Full runtime assets support macOS ARM64 only. For retrieval tests, use --model-only."
-        )
     manifest = json.loads((ROOT / "assets-manifest.json").read_text())
+    binary_spec = None if args.model_only else manifest["qdrant_binaries"].get(target())
+    if not args.model_only and binary_spec is None:
+        raise RuntimeError("No verified Qdrant binary for this platform; use --model-only")
     for name, digest in manifest["files"].items():
         if "/snapshots/" in name:
             filename = Path(name).name
@@ -62,26 +63,26 @@ def main(argv=None):
     tools = ROOT / ".tools"
     tools.mkdir(exist_ok=True)
     binary = tools / "qdrant"
-    if (
-        not binary.exists()
-        or hashlib.sha256(binary.read_bytes()).hexdigest() != manifest["files"][".tools/qdrant"]
-    ):
+    if not binary.is_file() or hashlib.sha256(binary.read_bytes()).hexdigest() != binary_spec["binary_sha256"]:
         with tempfile.TemporaryDirectory(dir=tools) as temp:
             archive = Path(temp) / "qdrant.tar.gz"
             download(
-                "https://github.com/qdrant/qdrant/releases/download/v1.19.1/qdrant-aarch64-apple-darwin.tar.gz",
+                f"https://github.com/qdrant/qdrant/releases/download/v{manifest['qdrant_server']}/"
+                + binary_spec["archive"],
                 archive,
-                ARCHIVE_HASH,
+                binary_spec["archive_sha256"],
             )
             with tarfile.open(archive) as tar:
                 members = [m for m in tar.getmembers() if m.isfile() and Path(m.name).name == "qdrant"]
                 if len(members) != 1 or members[0].size > 256 * 1024 * 1024:
                     raise RuntimeError("Unexpected release archive")
                 data = tar.extractfile(members[0]).read()
-            if hashlib.sha256(data).hexdigest() != manifest["files"][".tools/qdrant"]:
+            if hashlib.sha256(data).hexdigest() != binary_spec["binary_sha256"]:
                 raise RuntimeError("Qdrant binary checksum mismatch")
-            binary.write_bytes(data)
-            binary.chmod(0o755)
+            staged = Path(temp) / "qdrant"
+            staged.write_bytes(data)
+            staged.chmod(0o755)
+            os.replace(staged, binary)
     print("Pinned model and Qdrant assets verified; no runtime records or keys were changed.")
 
 

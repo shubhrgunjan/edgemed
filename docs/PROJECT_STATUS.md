@@ -4,7 +4,8 @@ Updated 28 September 2026. The initial architecture-only phase is complete; this
 
 | Area | Status |
 | --- | --- |
-| macOS encrypted local backend and semantic retrieval | Implemented and tested with synthetic data. |
+| macOS ARM64 encrypted local backend and semantic retrieval | Implemented and tested with synthetic data. |
+| macOS Intel and Linux x86-64/ARM64 launcher paths | Native assets pinned and portable checks added; physical encrypted-host rehearsals remain pending. |
 | Browser interface, staff workspaces, and private-LAN HTTPS demo | Implemented and locally verified. |
 | Reviewed synthetic reference synchronization | Implemented for the demo; staff observations remain local. |
 | Public browser sample | Static, synthetic, and intentionally separate from the local backend. |

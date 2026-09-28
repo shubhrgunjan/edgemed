@@ -1,6 +1,6 @@
 # Installation and hospital LAN demo
 
-This guide is for a **synthetic-data demonstration** on one macOS ARM64 server and browsers on the same private LAN. EdgeMed can keep serving when the internet is down, provided the local server, LAN and power remain available. Do not import real patient data.
+This guide is for a **synthetic-data demonstration** on one macOS Apple Silicon or Intel server and browsers on the same private LAN. For experimental Linux x86-64/ARM64 setup, use the [Linux guide](linux-installation.md). EdgeMed can keep serving when the internet is down, provided the local server, LAN and power remain available. Do not import real patient data.
 
 ## 1. Install and verify the server
 
@@ -19,7 +19,7 @@ uv run python -m edgemed.cli setup
 uv run python -m edgemed.cli preflight
 ```
 
-`provision_assets.py` downloads pinned public ONNX model files and a macOS Qdrant binary once, and checks each SHA-256 hash against `assets-manifest.json`. It needs internet during installation. The model and server binary are ignored by Git. `setup` creates an AES-256 encrypted sparsebundle and stores keys in the macOS Keychain. Keep both the encrypted container and protected Keychain material; losing the keys makes the container unrecoverable. For the operator password, run `uv run python -m edgemed.cli credentials edge-a` privately. Do not paste credentials into logs or tickets.
+`provision_assets.py` downloads pinned public ONNX model files and the Qdrant binary for the current macOS architecture once, and checks the archive and binary SHA-256 hashes against `assets-manifest.json`. It needs internet during installation. The model and server binary are ignored by Git. `setup` creates an AES-256 encrypted sparsebundle and stores keys in the macOS Keychain. Keep both the encrypted container and protected Keychain material; losing the keys makes the container unrecoverable. For the operator password, run `uv run python -m edgemed.cli credentials edge-a` privately. Do not paste credentials into logs or tickets.
 
 For server-only use:
 
@@ -74,4 +74,4 @@ With the Mac and two browsers connected to the same LAN, sign in as `alice` and 
 
 Disconnect the LAN from the internet while keeping local Wi-Fi and the Mac running. Capture and search a synthetic observation from both browsers. Then restart EdgeMed and confirm the notes persist. If the Mac or LAN goes down, browsers cannot save or search until it returns. Run the [isolated verification and backup checks](next-phase-runbook.md) before the demo. A cold backup is made with `uv run python -m edgemed.cli backup --output /path/to/new-directory`; it stops services, unmounts the vault, copies and checksums only the encrypted image, and still requires the original Keychain keys.
 
-Linux users can run the retrieval suite by provisioning only the model with `uv run python scripts/provision_assets.py --model-only` and then `uv run pytest -q`; Linux hospital-server deployment is not included here.
+Linux users can run the retrieval suite with `uv run python scripts/provision_assets.py --model-only` and `uv run pytest -q`. The [Linux installation guide](linux-installation.md) documents the experimental encrypted launcher; hospital production deployment is not included.

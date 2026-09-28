@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -22,11 +23,8 @@ def test_linux_model_only_downloads_verified_assets_without_server(tmp_path, mon
     base = f".cache/models/models--Qdrant--bge-small-en-v1.5-onnx-Q/snapshots/{provisioner.REVISION}"
     bodies = {"model_optimized.onnx": b"synthetic model", "tokenizer.json": b"{}"}
     files = {f"{base}/{name}": hashlib.sha256(data).hexdigest() for name, data in bodies.items()}
-    files[".tools/qdrant"] = "unused platform-specific hash"
     (tmp_path / "assets-manifest.json").write_text(json.dumps({"files": files}))
     monkeypatch.setattr(provisioner, "ROOT", tmp_path)
-    monkeypatch.setattr(provisioner.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(provisioner.platform, "machine", lambda: "x86_64")
     urls = []
 
     def public_asset(url, timeout):
@@ -45,10 +43,51 @@ def test_linux_model_only_downloads_verified_assets_without_server(tmp_path, mon
     assert len(urls) == 2
 
 
-def test_linux_full_provisioning_still_requires_reviewed_server(monkeypatch, provisioner):
-    monkeypatch.setattr(provisioner.platform, "system", lambda: "Linux")
-    with pytest.raises(RuntimeError, match="--model-only"):
-        provisioner.main([])
+def test_linux_full_provisioning_pins_archive_and_binary(tmp_path, monkeypatch, provisioner):
+    binary = b"synthetic Qdrant executable"
+    archive_file = io.BytesIO()
+    with tarfile.open(fileobj=archive_file, mode="w:gz") as archive:
+        info = tarfile.TarInfo("qdrant")
+        info.size = len(binary)
+        archive.addfile(info, io.BytesIO(binary))
+    archive_data = archive_file.getvalue()
+    spec = {
+        "archive": "qdrant-x86_64-unknown-linux-gnu.tar.gz",
+        "archive_sha256": hashlib.sha256(archive_data).hexdigest(),
+        "binary_sha256": hashlib.sha256(binary).hexdigest(),
+    }
+    (tmp_path / "assets-manifest.json").write_text(
+        json.dumps({"qdrant_server": "1.19.1", "files": {}, "qdrant_binaries": {"linux-x86_64": spec}})
+    )
+    monkeypatch.setattr(provisioner, "ROOT", tmp_path)
+    monkeypatch.setattr(provisioner, "target", lambda: "linux-x86_64")
+    requested = []
+
+    def public_asset(url, timeout):
+        requested.append(url)
+        return io.BytesIO(archive_data)
+
+    monkeypatch.setattr(provisioner, "urlopen", public_asset)
+    provisioner.main([])
+    assert (tmp_path / ".tools/qdrant").read_bytes() == binary
+    assert (tmp_path / ".tools/qdrant").stat().st_mode & 0o111
+    assert requested == [
+        "https://github.com/qdrant/qdrant/releases/download/v1.19.1/"
+        "qdrant-x86_64-unknown-linux-gnu.tar.gz"
+    ]
+    provisioner.main([])
+    assert len(requested) == 1
+
+
+def test_unsupported_native_architecture_rejected():
+    from edgemed.platforms import target
+
+    assert target("Darwin", "x86_64") == "macos-x86_64"
+    assert target("Linux", "aarch64") == "linux-arm64"
+    with pytest.raises(RuntimeError, match="64-bit"):
+        target("Linux", "i686")
+    with pytest.raises(RuntimeError, match="64-bit"):
+        target("Linux", "armv7l")
 
 
 def test_checksum_failure_preserves_existing_file(tmp_path, monkeypatch, provisioner):
