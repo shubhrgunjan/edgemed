@@ -244,7 +244,8 @@ def setup():
 
     private_write(VAULT / "qdrant.yaml", yaml.safe_dump(server_config))
     print(
-        "Encrypted profiles provisioned. Username: operator. Retrieve your password with: python -m edgemed.cli credentials edge-a"
+        "Encrypted profiles provisioned. Username: operator. "
+        "Retrieve your password with: uv run python -m edgemed.cli credentials edge-a"
     )
 
 
