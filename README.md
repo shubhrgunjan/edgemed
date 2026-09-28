@@ -23,6 +23,7 @@ The architecture is a **local server plus browsers**. A phone on the same truste
 
 ## Next development path
 
+- [ ] Add an intuitive, visual data-logging system for fast and easy data entry, monitoring, and analysis.
 - [ ] Complete independent security and privacy reviews before any real-data pilot.
 - [ ] Package and harden a hospital-local server with managed identity, backups, monitoring, and failover.
 - [ ] Test a physical Android device as a secure LAN browser client.
