@@ -1,0 +1,50 @@
+/* Official Catppuccin Latte and Mocha palette values: https://github.com/catppuccin/catppuccin */
+:root,
+:root[data-theme='latte'] {
+  color-scheme: light;
+  --ctp-rosewater: #dc8a78;
+  --ctp-red: #d20f39;
+  --ctp-peach: #fe640b;
+  --ctp-yellow: #df8e1d;
+  --ctp-green: #40a02b;
+  --ctp-teal: #179299;
+  --ctp-blue: #1e66f5;
+  --ctp-mauve: #8839ef;
+  --ctp-lavender: #7287fd;
+  --ctp-text: #4c4f69;
+  --ctp-subtext-1: #5c5f77;
+  --ctp-subtext-0: #6c6f85;
+  --ctp-overlay-0: #9ca0b0;
+  --ctp-surface-2: #acb0be;
+  --ctp-surface-1: #bcc0cc;
+  --ctp-surface-0: #ccd0da;
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+  --ctp-accent: var(--ctp-mauve);
+  --ctp-on-accent: var(--ctp-base);
+}
+:root[data-theme='mocha'] {
+  color-scheme: dark;
+  --ctp-rosewater: #f5e0dc;
+  --ctp-red: #f38ba8;
+  --ctp-peach: #fab387;
+  --ctp-yellow: #f9e2af;
+  --ctp-green: #a6e3a1;
+  --ctp-teal: #94e2d5;
+  --ctp-blue: #89b4fa;
+  --ctp-mauve: #cba6f7;
+  --ctp-lavender: #b4befe;
+  --ctp-text: #cdd6f4;
+  --ctp-subtext-1: #bac2de;
+  --ctp-subtext-0: #a6adc8;
+  --ctp-overlay-0: #6c7086;
+  --ctp-surface-2: #585b70;
+  --ctp-surface-1: #45475a;
+  --ctp-surface-0: #313244;
+  --ctp-base: #1e1e2e;
+  --ctp-mantle: #181825;
+  --ctp-crust: #11111b;
+  --ctp-accent: var(--ctp-mauve);
+  --ctp-on-accent: var(--ctp-base);
+}
