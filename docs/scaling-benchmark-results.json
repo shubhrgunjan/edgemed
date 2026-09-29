@@ -1,0 +1,133 @@
+{
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.14",
+  "model": "BAAI/bge-small-en-v1.5",
+  "benchmark_timestamp": "2026-09-29T13:10:13Z",
+  "scales": [
+    {
+      "records": 1000,
+      "durable_ingest_s": 0.025,
+      "indexing_s": 0.926,
+      "cold_search_initial_ms": 33.54,
+      "cold_search_disk_cache_ms": 12.97,
+      "baseline_warm_p50_ms": 25.8,
+      "optimized_warm_p50_ms": 8.46,
+      "optimized_warm_p95_ms": 21.49,
+      "optimized_warm_p99_ms": 22.94,
+      "optimized_warm_max_ms": 22.94,
+      "template_hit_rate": 1.0,
+      "peak_rss_mib": 295.09,
+      "stages_p50_ms": {
+        "normalize": 0.001,
+        "embedding": 6.098,
+        "lock_wait": 0.002,
+        "canonical_and_lexical_prepare": 0.008,
+        "dense_local": 0.499,
+        "dense_reference": 0.001,
+        "keyword": 0.425,
+        "fusion": 1.019,
+        "payload": 0.38
+      }
+    },
+    {
+      "records": 5000,
+      "durable_ingest_s": 0.485,
+      "indexing_s": 7.31,
+      "cold_search_initial_ms": 338.27,
+      "cold_search_disk_cache_ms": 102.03,
+      "baseline_warm_p50_ms": 286.88,
+      "optimized_warm_p50_ms": 34.08,
+      "optimized_warm_p95_ms": 39.5,
+      "optimized_warm_p99_ms": 68.72,
+      "optimized_warm_max_ms": 68.72,
+      "template_hit_rate": 1.0,
+      "peak_rss_mib": 333.04,
+      "stages_p50_ms": {
+        "normalize": 0.003,
+        "embedding": 13.134,
+        "lock_wait": 0.004,
+        "canonical_and_lexical_prepare": 0.01,
+        "dense_local": 2.778,
+        "dense_reference": 0.002,
+        "keyword": 4.557,
+        "fusion": 11.21,
+        "payload": 1.938
+      }
+    },
+    {
+      "records": 10000,
+      "durable_ingest_s": 1.033,
+      "indexing_s": 15.048,
+      "cold_search_initial_ms": 819.76,
+      "cold_search_disk_cache_ms": 185.96,
+      "baseline_warm_p50_ms": 609.72,
+      "optimized_warm_p50_ms": 63.98,
+      "optimized_warm_p95_ms": 73.81,
+      "optimized_warm_p99_ms": 73.99,
+      "optimized_warm_max_ms": 73.99,
+      "template_hit_rate": 1.0,
+      "peak_rss_mib": 378.02,
+      "stages_p50_ms": {
+        "normalize": 0.003,
+        "embedding": 14.606,
+        "lock_wait": 0.004,
+        "canonical_and_lexical_prepare": 0.012,
+        "dense_local": 6.21,
+        "dense_reference": 0.002,
+        "keyword": 10.119,
+        "fusion": 28.407,
+        "payload": 4.263
+      }
+    },
+    {
+      "records": 25000,
+      "durable_ingest_s": 3.205,
+      "indexing_s": 30.729,
+      "cold_search_initial_ms": 2215.9,
+      "cold_search_disk_cache_ms": 482.25,
+      "baseline_warm_p50_ms": null,
+      "optimized_warm_p50_ms": 161.5,
+      "optimized_warm_p95_ms": 177.43,
+      "optimized_warm_p99_ms": 233.94,
+      "optimized_warm_max_ms": 233.94,
+      "template_hit_rate": 1.0,
+      "peak_rss_mib": 458.64,
+      "stages_p50_ms": {
+        "normalize": 0.003,
+        "embedding": 15.551,
+        "lock_wait": 0.004,
+        "canonical_and_lexical_prepare": 0.012,
+        "dense_local": 19.069,
+        "dense_reference": 0.002,
+        "keyword": 27.213,
+        "fusion": 86.9,
+        "payload": 11.232
+      }
+    },
+    {
+      "records": 50000,
+      "durable_ingest_s": 8.072,
+      "indexing_s": 71.744,
+      "cold_search_initial_ms": 7175.63,
+      "cold_search_disk_cache_ms": 1346.93,
+      "baseline_warm_p50_ms": null,
+      "optimized_warm_p50_ms": 399.63,
+      "optimized_warm_p95_ms": 439.84,
+      "optimized_warm_p99_ms": 450.68,
+      "optimized_warm_max_ms": 450.68,
+      "template_hit_rate": 1.0,
+      "peak_rss_mib": 617.54,
+      "stages_p50_ms": {
+        "normalize": 0.003,
+        "embedding": 13.014,
+        "lock_wait": 0.004,
+        "canonical_and_lexical_prepare": 0.01,
+        "dense_local": 32.937,
+        "dense_reference": 0.002,
+        "keyword": 50.028,
+        "fusion": 176.198,
+        "payload": 117.172
+      }
+    }
+  ]
+}

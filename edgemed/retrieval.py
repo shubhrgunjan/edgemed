@@ -17,11 +17,61 @@ import qdrant_edge as q  # noqa: E402
 MODEL = "BAAI/bge-small-en-v1.5"
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
 def tokens(text):
-    return re.findall(r"[a-z0-9]+", text.lower())
+    return _TOKEN_RE.findall(text.lower())
 
 
 MODEL_REVISION = "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
+MAX_LEXICAL_CACHE_BYTES = int(os.environ.get("EDGEMED_MAX_LEXICAL_CACHE_MB", "256")) * 1024 * 1024
+
+
+class LexicalCorpus:
+    """Precomputed sparse lexical index, forward mappings, and canonical eligibility."""
+
+    def __init__(self, records, revisions):
+        self.records = records
+        self.revisions = revisions
+        self.num_docs = len(revisions)
+
+        # Inverted index: token -> dict[rid, tf]
+        self.postings = {}
+        self.lengths = {}
+        total_tokens = 0
+        for rid, (_, rev) in revisions.items():
+            toks = tokens(rev["content"])
+            counts = Counter(toks)
+            length = sum(counts.values())
+            self.lengths[rid] = length
+            total_tokens += length
+            for t, tf in counts.items():
+                if t not in self.postings:
+                    self.postings[t] = {}
+                self.postings[t][rid] = tf
+
+        self.total_tokens = total_tokens
+        self.avg_len = total_tokens / max(1, self.num_docs)
+
+        # Precompute Qdrant eligibility filter once per generation/corpus
+        try:
+            self.eligible = q.Filter(must=[q.HasIdCondition(set(revisions))]) if revisions else None
+        except Exception:
+            self.eligible = None
+
+    def estimate_bytes(self):
+        postings_bytes = sum(len(p) * 32 + 128 for p in self.postings.values())
+        lengths_bytes = len(self.lengths) * 32
+        revisions_bytes = len(self.revisions) * 128
+        records_bytes = sum(len(r.get("content", "").encode()) + 512 for r in self.records.values())
+        return postings_bytes + lengths_bytes + revisions_bytes + records_bytes
+
+    def __iter__(self):
+        """Backward compatibility: allows unpacking as (records, revisions, docs, lengths, df, avg)."""
+        docs = {rid: Counter(tokens(rev["content"])) for rid, (_, rev) in self.revisions.items()}
+        df = Counter(t for counts in docs.values() for t in counts)
+        return iter((self.records, self.revisions, docs, self.lengths, df, self.avg_len))
 
 
 def local_embedder(cache, threads=2):
@@ -41,7 +91,7 @@ class Retrieval:
         self.store, self.lock = store, threading.RLock()
         self.model_lock, self.drain_lock = threading.Lock(), threading.Lock()
         self.model = embedder or local_embedder(cache)
-        self._corpus = None
+        self._corpora = {}
         path = store.root / "vectors"
         path.mkdir(mode=0o700, exist_ok=True)
         if any(path.iterdir()):
@@ -60,6 +110,19 @@ class Retrieval:
         self.reference_path = None
         self.reload_reference()
 
+    @property
+    def _corpus(self):
+        if not self._corpora:
+            return None
+        k, v = next(iter(self._corpora.items()))
+        return (k, v)
+
+    @_corpus.setter
+    def _corpus(self, val):
+        self._corpora.clear()
+        if val is not None:
+            self._corpora[val[0]] = val[1]
+
     def reload_reference(self):
         # Open before swapping so a corrupt replacement never closes the working shard.
         state = self.store.get_setting("reference_snapshot")
@@ -75,11 +138,11 @@ class Retrieval:
 
     def clear_cache(self):
         with self.lock:
-            self._corpus = None
+            self._corpora.clear()
 
-    def drain(self):
+    def drain(self, batch_size=32):
         with self.drain_lock:
-            jobs = self.store.pending_jobs()[:4]
+            jobs = self.store.pending_jobs()[:batch_size]
             live = [j for j in jobs if not j["memory_deleted"]]
             with self.model_lock:
                 vectors = list(self.model.embed([j["content"] for j in live])) if live else []
@@ -112,23 +175,76 @@ class Retrieval:
             return len(jobs)
 
     def _load_corpus(self, owner, subject):
-        # One bounded in-memory corpus, invalidated by every canonical transaction.
         with self.store.lock:
-            key = (owner, subject, self.store.generation)
-            if self._corpus and self._corpus[0] == key:
-                return self._corpus[1]
+            # Purge any stale generation corpora
+            current_gen = self.store.generation
+            stale = [k for k in self._corpora if k[2] != current_gen]
+            for k in stale:
+                del self._corpora[k]
+
+            key = (owner, subject, current_gen)
+            if key in self._corpora:
+                return self._corpora[key]
+
+            # Fast persistent cache recovery for general owner corpus on cold starts / restarts
+            if subject is None:
+                cache_file = self.store.root / f"lexical_{owner}.cache"
+                if cache_file.is_file():
+                    try:
+                        import pickle
+                        data = pickle.loads(cache_file.read_bytes())
+                        if data.get("generation") == current_gen and data.get("owner") == owner:
+                            corpus = LexicalCorpus.__new__(LexicalCorpus)
+                            corpus.records = data["records"]
+                            corpus.revisions = data["revisions"]
+                            corpus.num_docs = len(corpus.revisions)
+                            corpus.postings = data["postings"]
+                            corpus.lengths = data["lengths"]
+                            corpus.total_tokens = data["total_tokens"]
+                            corpus.avg_len = data["total_tokens"] / max(1, corpus.num_docs)
+                            try:
+                                corpus.eligible = (
+                                    q.Filter(must=[q.HasIdCondition(set(corpus.revisions))])
+                                    if corpus.revisions
+                                    else None
+                                )
+                            except Exception:
+                                corpus.eligible = None
+                            if corpus.estimate_bytes() <= MAX_LEXICAL_CACHE_BYTES:
+                                self._corpora[key] = corpus
+                            return corpus
+                    except Exception:
+                        pass
+
             records = self.store.current_records(owner, subject)
+
         revisions = {rev["id"]: (mid, rev) for mid, r in records.items() for rev in r["active"]}
-        docs = {rid: Counter(tokens(rev["content"])) for rid, (_, rev) in revisions.items()}
-        lengths = {rid: sum(c.values()) for rid, c in docs.items()}
-        df = Counter(t for counts in docs.values() for t in counts)
-        corpus = (records, revisions, docs, lengths, df, sum(lengths.values()) / max(1, len(docs)))
-        # Conservative estimate; oversized corpora stay uncached, never silently truncated.
-        estimate = sum(
-            len(rev["content"].encode()) * 4 + len(docs[rid]) * 200 + 2048
-            for rid, (_, rev) in revisions.items()
-        )
-        self._corpus = (key, corpus) if estimate <= 32 * 1024 * 1024 else None
+        corpus = LexicalCorpus(records, revisions)
+
+        estimate = corpus.estimate_bytes()
+        if estimate <= MAX_LEXICAL_CACHE_BYTES:
+            if len(self._corpora) >= 8:
+                self._corpora.pop(next(iter(self._corpora)), None)
+            self._corpora[key] = corpus
+
+            # Persist general owner corpus for cold start acceleration
+            if subject is None:
+                try:
+                    import pickle
+                    cache_file = self.store.root / f"lexical_{owner}.cache"
+                    cache_data = {
+                        "generation": current_gen,
+                        "owner": owner,
+                        "records": corpus.records,
+                        "revisions": corpus.revisions,
+                        "postings": corpus.postings,
+                        "lengths": corpus.lengths,
+                        "total_tokens": corpus.total_tokens,
+                    }
+                    cache_file.write_bytes(pickle.dumps(cache_data, protocol=5))
+                except Exception:
+                    pass
+
         return corpus
 
     def search(
@@ -146,11 +262,17 @@ class Retrieval:
             self.lock.acquire()
         try:
             with span(timings, "canonical_and_lexical_prepare"):
-                records, revisions, docs, lengths, df, avg = self._load_corpus(owner, subject)
+                corpus = self._load_corpus(owner, subject)
+                if isinstance(corpus, LexicalCorpus):
+                    records, revisions = corpus.records, corpus.revisions
+                    eligible = corpus.eligible
+                else:
+                    records, revisions, docs, lengths, df, avg = corpus
+                    eligible = q.Filter(must=[q.HasIdCondition(set(revisions))]) if revisions else None
+
             if not revisions:
                 return []
-            # Apply canonical eligibility before top-k to prevent stale/foreign heads crowding hits.
-            eligible = q.Filter(must=[q.HasIdCondition(set(revisions))])
+
             with span(timings, "dense_local"):
                 points = self.shard.search(
                     q.SearchRequest(
@@ -174,17 +296,34 @@ class Retrieval:
                 lexical = {}
                 if mode == "hybrid":
                     terms = set(tokens(query))
-                    for rid, counts in docs.items():
-                        score = 0.0
+                    if isinstance(corpus, LexicalCorpus):
+                        num_docs, avg_len = corpus.num_docs, max(corpus.avg_len, 1)
                         for t in terms:
-                            tf = counts[t]
-                            if tf:
-                                idf = math.log(1 + (len(docs) - df[t] + 0.5) / (df[t] + 0.5))
-                                score += (
-                                    idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * lengths[rid] / max(avg, 1)))
+                            plist = corpus.postings.get(t)
+                            if not plist:
+                                continue
+                            df_t = len(plist)
+                            idf = math.log(1 + (num_docs - df_t + 0.5) / (df_t + 0.5))
+                            for rid, tf in plist.items():
+                                score = (
+                                    idf
+                                    * tf
+                                    * 2.5
+                                    / (tf + 1.5 * (0.25 + 0.75 * corpus.lengths[rid] / avg_len))
                                 )
-                        if score:
-                            lexical[rid] = score
+                                lexical[rid] = lexical.get(rid, 0.0) + score
+                    else:
+                        for rid, counts in docs.items():
+                            score = 0.0
+                            for t in terms:
+                                tf = counts[t]
+                                if tf:
+                                    idf = math.log(1 + (len(docs) - df[t] + 0.5) / (df[t] + 0.5))
+                                    score += (
+                                        idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * lengths[rid] / max(avg, 1)))
+                                    )
+                            if score:
+                                lexical[rid] = score
             with span(timings, "fusion"):
                 dense = {}
                 for p in points:
@@ -202,6 +341,8 @@ class Retrieval:
                     mid, rev = revisions[rid]
                     if mid not in chosen:
                         chosen[mid] = (rid, rev)
+                        if len(chosen) >= limit:
+                            break
                 results = []
             with span(timings, "payload"):
                 for mid, (rid, rev) in list(chosen.items())[:limit]:
@@ -237,7 +378,7 @@ class Retrieval:
 
     def close(self):
         with self.drain_lock, self.model_lock, self.lock:
-            self._corpus = None
+            self._corpora.clear()
             if self.reference:
                 self.reference.close()
             self.shard.close()

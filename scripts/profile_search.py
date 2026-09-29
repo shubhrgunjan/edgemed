@@ -6,7 +6,6 @@ import math
 import os
 import platform
 import random
-import resource
 import secrets
 import statistics
 import tempfile
@@ -17,6 +16,44 @@ from edgemed.fixtures import NOTES
 from edgemed.models import CreateMemory
 from edgemed.retrieval import Retrieval
 from edgemed.store import Store
+
+
+def get_peak_rss_mb():
+    try:
+        import resource
+
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return round(peak / (1048576 if platform.system() == "Darwin" else 1024), 2)
+    except ImportError:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            counters = PROCESS_MEMORY_COUNTERS()
+            counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            psapi = ctypes.WinDLL("psapi.dll")
+            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            if psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), ctypes.sizeof(counters)):
+                return round(counters.PeakWorkingSetSize / (1024 * 1024), 2)
+        except Exception:
+            pass
+        return 0.0
 
 
 def summary(values):
@@ -100,8 +137,7 @@ def main():
             k: round(statistics.median(s["stages_ms"].get(k, 0) for s in samples), 3)
             for k in samples[0]["stages_ms"]
         }
-        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        report["peak_rss_mib"] = round(peak / (1048576 if platform.system() == "Darwin" else 1024), 2)
+        report["peak_rss_mib"] = get_peak_rss_mb()
         retrieval.close()
         store.close()
     args.output.parent.mkdir(parents=True, exist_ok=True)
