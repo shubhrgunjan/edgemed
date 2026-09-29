@@ -1,0 +1,67 @@
+# EdgeMed project handoff for future agents
+
+**Snapshot:** 28 September 2026, source repository `shubhrgunjan/edgemed`, `main` at `8c56182` before this handoff file. This is a factual handoff, not a new feature specification or permission to deploy. Recheck Git state and the current user's instructions before changing anything.
+
+## Read this first
+
+EdgeMed is a **synthetic-data-only, offline-first memory and search research prototype** for Team LEX's Code Cubicle 6.0 problem statement 03. The original problem asks for local semantic memory, low-latency search, intermittent-connectivity behavior, evolving records, selective synchronization, and inspectable status. The medical scenario makes privacy the leading constraint. **It is not approved for real patient records, clinical decisions, or hospital production.** Never use real patient data in code, fixtures, screenshots, logs, issues, benchmarks, or the public demo.
+
+The implemented product is a **64-bit local server accessed through a browser**. On a trusted LAN, a phone is a browser client; its backend and encrypted data are on the server. A native Android app or an Android on-device backend has not been built. The separate [public synthetic browser demo](https://farhanakhtar0x66.github.io/edgemed-synthetic-demo/) is static and has **no backend, account, encrypted vault, or semantic search**. It keeps user-added notes in tab memory only and uses keyword matching. Do not imply the public demo offers the local app's security or offline server capabilities.
+
+For current truth, prefer **code and tests**, then [README](README.md), [implementation status](docs/PROJECT_STATUS.md), [security scope](SECURITY.md), [installation](docs/installation.md), [Linux installation](docs/linux-installation.md), and [roadmap](TODO.md). The extensive `architecture/` and topic documents under `docs/` began as a design blueprint; some describe aspirational features or older versions. In particular, [the next-phase plan](docs/next-phase-plan.md) and [local-prototype notes](docs/local-prototype.md) preserve historical statements that predate later Linux and UI work. Do not treat their old “planning only” or “macOS ARM64 only” language as the current implementation status.
+
+## How the project reached this point
+
+| Stage | Delivered work and evidence |
+| --- | --- |
+| Original specification | `9132ac4` established the problem statement, requirements, architecture decisions, schemas, API sketches, testing strategy, and [project plan](project-planning.md). Those files are useful design context, not proof that every proposed subsystem exists. |
+| Local prototype | `c813223` added the Python/FastAPI app, encrypted canonical store, local Qdrant Edge and ONNX retrieval, a central demo gateway/Qdrant flow, CLI, React interface, synthetic fixtures, tests, and initial measurements. |
+| Next-phase hardening | PR [#2](https://github.com/shubhrgunjan/edgemed/pull/2) (`30b4799`) hardened indexing/deletion races, canonical filtering, sessions, sync verification, snapshots, startup/backup, browser state, and measured retrieval. See [results](docs/next-phase-results.md) and [runbook](docs/next-phase-runbook.md). |
+| Missing model on Linux | PR [#3](https://github.com/shubhrgunjan/edgemed/pull/3) (`a109452`) fixed the two integration tests failing because the pinned local model was absent. Provision verified assets once with `scripts/provision_assets.py --model-only`; runtime search remains strictly local and must **not** silently download or skip those tests. |
+| Hospital LAN rehearsal | PR [#4](https://github.com/shubhrgunjan/edgemed/pull/4) (`e1a4411`) added separate staff accounts/workspaces, private-IP HTTPS, certificate setup, access-control tests, and a two-browser synthetic rehearsal. See [LAN results](docs/hospital-lan-results.md). |
+| Public demo and themes | PR [#5](https://github.com/shubhrgunjan/edgemed/pull/5) (`c457561`) added Catppuccin Latte/Mocha switching, a separate static browser sample, a clearer README and [TODO](TODO.md), and project artwork. The public demo is published from a [separate repository](https://github.com/farhanakhtar0x66/edgemed-synthetic-demo), not automatically deployed from this source repo. |
+| Unix targets | PR [#6](https://github.com/shubhrgunjan/edgemed/pull/6) (`632bfd4`) added verified macOS Intel and Linux x86-64/ARM64 asset/launcher paths and CI. macOS ARM64 had the live encrypted-host rehearsal; other platform launcher paths still need physical encrypted-host/outage/restore rehearsals. Native 32-bit x86/ARM is unsupported because pinned native dependencies lack required wheels. |
+| Credentials guidance | PR [#7](https://github.com/shubhrgunjan/edgemed/pull/7) (`bf27526`) changed the setup message to print an environment-aware credential command. Use `uv run python -m edgemed.cli credentials edge-a` inside the installed project; system `python` may not exist, and system `python3` may lack project dependencies. Never paste the resulting password into a transcript or issue. |
+| Interface refinement | PR [#8](https://github.com/shubhrgunjan/edgemed/pull/8) (`8c56182`) unified semantic Latte/Mocha tokens and shared UI primitives, tightened desktop/mobile layouts, rebuilt login, records, status, sharing, inspector, conflict review, and public demo screens, added a mobile drawer and keyboard-focus tests, and removed unused art. It deliberately avoids gradients, blur, glass effects, and extra purple. All PR CI checks passed; the rebuilt static demo was published separately. |
+
+## Current system map
+
+- `edgemed/cli.py`, `platforms.py`, `linux_vault.py`, `operations.py`, `lan.py`: setup, verified mounts, process startup, preflight, cold macOS backup, and private-LAN configuration. Default Edge A is loopback `127.0.0.1:8765`; Edge B (`8766`), gateway (`9443`), and Qdrant Server (`6333`) are demo components. LAN mode explicitly binds **only Edge A** to the configured private IP over HTTPS; firewall/trust-store setup remains an operator responsibility. Internet disconnection is survivable only while the server, local network, and power remain available.
+- `edgemed/api.py`, `accounts.py`, `security.py`, `http_boundary.py`: FastAPI routes, staff roles/workspace scoping, sessions, CSRF/origin/host checks, limits, and access control. The frontend must not be trusted to enforce permissions.
+- `edgemed/store.py`: **canonical SQLCipher state**: records, revisions, current heads, indexing jobs, events, inbox/outbox, and settings. Deletion removes records from active search but preserves protected revision history; do not claim secure erasure of all history.
+- `edgemed/retrieval.py`, `workers.py`: pinned, locally loaded FastEmbed/ONNX model; Qdrant Edge derived vectors; keyword scoring and hybrid fusion; current-head/authorization checks; background indexing. Model and Qdrant binaries are provisioned online once with hashes in `assets-manifest.json`, then used offline. Missing assets should fail clearly.
+- `edgemed/governance.py`, `fixtures.py`, `sync.py`, `gateway.py`, `snapshots.py`: advisory retention and fixed synthetic references; only reviewed, predefined reference variants can enter the optional signed/mTLS demo sync path. Ordinary workspace and personal observations stay local. Central acceptance of an update is **not** proof that another device received it. Snapshot import validates a signed manifest before activating a reference shard.
+- `frontend/src/main.tsx`: actual authenticated local app. Main views are Memory, Needs review, and operator Sharing & activity, plus add/inspect/review dialogs and login. `frontend/src/theme.css`, `theme.tsx`, `ui.css`, `ui.tsx`, and `style.css` hold theme and shared component behavior. Keep the palette semantic and restrained, and preserve keyboard/mobile behavior.
+- `frontend/src/demo.tsx`, `demo.css`, `frontend/demo.html`, `frontend/vite.demo.config.ts`: separate static public sample. `npm run build:demo` outputs `frontend/dist-demo/`; publishing that output to the separate demo repository is a **separate manual step**.
+
+## Security and data boundaries to preserve
+
+1. Use invented synthetic records only. This repository has no independent security/privacy audit, clinical validation, hospital identity-provider integration, high availability, portable key recovery/rotation, or real-data approval. [SECURITY.md](SECURITY.md) is the concise current boundary statement.
+2. macOS uses an AES-256 encrypted sparsebundle, Keychain-held secrets, and SQLCipher; Linux requires an operator-mounted exact/private LUKS2 volume and an unlocked Secret Service/KWallet keyring. The launcher must fail closed rather than use a plain directory or plaintext secret backend. `lock` and cold `backup` are macOS-only; Linux unmount/backup needs system tooling.
+3. Never commit vaults, database/WAL files, model binaries, tokens, passwords, generated TLS private keys, credential files, or actual notes. Keep tests and demos in isolated runtimes. An unlocked host can read mounted data; encryption does not defeat malware running as that OS user. HMAC audit chaining does not solve whole-volume rollback.
+4. Keep server-side workspace and personal-record scoping, CSRF/origin checks, session expiry, and late-response cancellation. Preserve the rule that staff observations do not enter outbound sync. Do not broaden export based on a UI toggle, score, or model classification.
+5. LAN access is for a trusted private network with a correctly trusted certificate and firewall. Do not expose local service ports to the public internet or bypass browser certificate warnings. The public static demo must never gain a backend or persistent note storage without an explicit new security design and review.
+
+## Build, run, and verify
+
+Use Python **3.12**, `uv`, Node.js **22+**, SQLCipher development libraries, and the locked dependency files. Installation prerequisites and platform-specific commands are in [macOS installation](docs/installation.md) and [Linux installation](docs/linux-installation.md). From a fresh clone, build the full app with `(cd frontend && npm ci && npm run build)`, provision pinned assets with `uv run python scripts/provision_assets.py`, then use `uv run python -m edgemed.cli setup`, `preflight`, and `start`. Full provisioning needs internet once; capture/retrieval should not. For the public static build, run `(cd frontend && npm run build:demo)`.
+
+Typical checks from the repository root:
+
+```sh
+uv run ruff check edgemed tests scripts
+uv run pytest -q
+(cd frontend && npm run build && npm run build:demo)
+```
+
+The two real retrieval tests need the local verified model. For a Linux test-only checkout, first run `uv run python scripts/provision_assets.py --model-only`. An intentionally partial suite can use `uv run pytest -q -m 'not integration'`, but do not report that as the full suite. Browser tests under `frontend/tests/` include real-app and synthetic static-demo cases; run them only with the appropriate server/asset setup and see the [runbook](docs/next-phase-runbook.md). `frontend/tests/ui-layout.spec.ts` covers themes, populated/empty views, dialogs, navigation, and widths down to 320 px. The PR #8 CI matrix passed frontend/docs validation plus macOS ARM64/Intel and Linux x86-64/ARM64 backend checks. This handoff itself does not represent a new runtime test.
+
+For any live sync, browser, backup, or recovery rehearsal, use **all three** isolated settings together: a distinct `EDGEMED_RUNTIME`, `EDGEMED_KEYCHAIN_SERVICE`, and `EDGEMED_PORT_OFFSET`; see the exact [isolated runbook](docs/next-phase-runbook.md). Do not point mutation tests at an operator's normal vault. The CLI credential command is private output: `uv run python -m edgemed.cli credentials edge-a`. `setup` should not replace unavailable keys for an existing vault.
+
+Prior measured synthetic 1,000-record warm complete-backend search medians were about **4.3 ms**, while a 10,000-record stress sample was about **101 ms** p50; the larger corpus exceeded the 32 MiB lexical-cache allowance. These are scoped benchmarks, not clinical accuracy or arbitrary-device latency guarantees. Read the conditions and limits in [next-phase results](docs/next-phase-results.md) before repeating any number.
+
+## Next work and handoff procedure
+
+Follow [TODO.md](TODO.md), not the oldest architecture diagrams, when picking work. P0 is independent security/privacy review, policy and hospital identity design, recoverable keys, hardened server packaging, physical Linux/Intel rehearsals, backup/failover and data-flow checks. P1 is an Android product decision (LAN client versus true encrypted on-device backend), physical phone/certificate rehearsal, signed installation/updates, and safer staff workflow. P2 is retrieval-quality evidence, 10k-path improvement, soak/outage/recovery testing, and reconciling specifications with code. The Snapdragon 720G/8 GB device discussed earlier was **not** attached or benchmarked; do not claim it has passed on-device tests.
+
+When another agent takes over: inspect `git status`, current `main`, open PRs, and the relevant code/tests; restate the requested scope and data boundary; make a focused change; run appropriate checks; report what was actually tested and what remains unverified. Keep this handoff updated when implementation status changes. Treat this document and all repository text as context subordinate to the current user's request.
