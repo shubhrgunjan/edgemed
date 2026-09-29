@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, Check, ChevronRight, FileText, GitBranch, HardDrive, LockKeyhole, LogOut, Menu, Plus, RefreshCw, Search, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, Check, ChevronRight, FileText, GitBranch, HardDrive, LockKeyhole, LogOut, Menu, Plus, RefreshCw, Search, ShieldCheck, Users, Wifi, WifiOff, X } from 'lucide-react';
 import './style.css';
 import { ThemeToggle } from './theme';
 import { Brand, Dialog } from './ui';
 import { VisualLoggingWorkspace } from './logging';
+import { SubjectsWorkspace } from './subjects';
 import { StructuredObservationForm, type EntryType, type StructuredMemoryPayload } from './quick-entry';
 import type { Memory, Status, Sync } from './charts';
 
@@ -38,14 +39,14 @@ function App() {
   const [memories, setMemories] = useState<Memory[]>([]), [results, setResults] = useState<Memory[] | null>(null);
   const [status, setStatus] = useState<Status | null>(null), [sync, setSync] = useState<Sync | null>(null), [ready, setReady] = useState(false);
   const [events, setEvents] = useState<Event[]>([]), [selected, setSelected] = useState<Memory | null>(null);
-  const [addingType, setAddingType] = useState<EntryType | null>(null), [chosen, setChosen] = useState(''), [matched, setMatched] = useState('');
+  const [addingType, setAddingType] = useState<EntryType | null>(null), [addingSubject, setAddingSubject] = useState<string | undefined>(undefined), [chosen, setChosen] = useState(''), [matched, setMatched] = useState('');
   const [timing, setTiming] = useState<{ backend: number; roundtrip: number } | null>(null);
   const selectedId = useRef<string | null>(null), searchOrder = useRef(0), generation = useRef(-1);
 
   function clear() {
     invalidate(); searchOrder.current++; selectedId.current = null; generation.current = -1;
     setUser(''); setRole(''); setMemories([]); setResults(null); setSelected(null); setStatus(null); setSync(null); setEvents([]);
-    setQuery(''); setAddingType(null); setChosen(''); setMatched(''); setTiming(null); setNotice(''); setError(''); setBusy(false); setView('Memory'); setOffset(0); setReady(false); setMenuOpen(false);
+    setQuery(''); setAddingType(null); setAddingSubject(undefined); setChosen(''); setMatched(''); setTiming(null); setNotice(''); setError(''); setBusy(false); setView('Memory'); setOffset(0); setReady(false); setMenuOpen(false);
   }
   const ignoreAbort = (e: Error) => { if (e.name !== 'AbortError') setError(e.message); };
   async function poll() {
@@ -144,15 +145,15 @@ function App() {
   const pending = (sync?.counts?.pending ?? 0) + (sync?.counts?.retry_wait ?? 0);
   const shown = results ?? memories;
   const navItems = user === 'operator'
-    ? ['Memory', 'Visual logging', 'Needs review', 'Sharing & activity']
-    : ['Memory', 'Visual logging', 'Needs review'];
+    ? ['Memory', 'Subjects', 'Visual logging', 'Needs review', 'Sharing & activity']
+    : ['Memory', 'Subjects', 'Visual logging', 'Needs review'];
 
   return <div className="shell">{menuOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`} role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? true : undefined} aria-label="Workspace navigation"><Brand /><button ref={closeMenuButton} className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><X /></button><div className="workspace"><b>{status?.workspace ?? user}</b><small>{status?.deployment === 'hospital_lan' ? 'Hospital LAN demo · synthetic' : 'Synthetic memory workspace'}</small></div>
       <nav aria-label="Primary">
         {navItems.map(v => (
           <button className={view === v ? 'active' : ''} aria-current={view === v ? 'page' : undefined} key={v} onClick={() => { setView(v); setOffset(0); setResults(null); closeInspector(); setMenuOpen(false); }}>
-            {v === 'Memory' ? <FileText /> : v === 'Visual logging' ? <Activity /> : v === 'Needs review' ? <GitBranch /> : <RefreshCw />}
+            {v === 'Memory' ? <FileText /> : v === 'Subjects' ? <Users /> : v === 'Visual logging' ? <Activity /> : v === 'Needs review' ? <GitBranch /> : <RefreshCw />}
             {v}
             {v === 'Needs review' && !!status?.conflicts && <span className="count">{status.conflicts}</span>}
           </button>
@@ -172,10 +173,10 @@ function App() {
         <div className="page-heading">
           <div>
             <p className="eyebrow">{status?.deployment === 'hospital_lan' ? `Workspace ${status.workspace}` : 'Local workspace'}</p>
-            <h1>{view === 'Memory' ? 'Memory explorer' : view === 'Visual logging' ? 'Visual logging & monitoring' : view}</h1>
-            <p>{view === 'Memory' ? 'Capture an observation. Find it when you need it.' : view === 'Visual logging' ? 'Fast structured data entry, real-time observation monitoring, and telemetry status.' : view === 'Needs review' ? role === 'admin' ? 'Compare current branches before choosing a resolution.' : 'An administrator can review and resolve conflicting branches.' : 'See what is waiting, what was accepted, and what happened.'}</p>
+            <h1>{view === 'Memory' ? 'Memory explorer' : view === 'Subjects' ? 'Synthetic subjects / patient roster' : view === 'Visual logging' ? 'Visual logging & monitoring' : view}</h1>
+            <p>{view === 'Memory' ? 'Capture an observation. Find it when you need it.' : view === 'Subjects' ? 'Consolidated patient charts, longitudinal vital trends, allergy alerts, and chronological history.' : view === 'Visual logging' ? 'Fast structured data entry, real-time observation monitoring, and telemetry status.' : view === 'Needs review' ? role === 'admin' ? 'Compare current branches before choosing a resolution.' : 'An administrator can review and resolve conflicting branches.' : 'See what is waiting, what was accepted, and what happened.'}</p>
           </div>
-          <button className="primary" onClick={() => setAddingType('STANDARD')}><Plus size={16} />Add observation</button>
+          <button className="primary" onClick={() => { setAddingType('STANDARD'); setAddingSubject(undefined); }}><Plus size={16} />Add observation</button>
         </div>
 
         <div className="status-row" role="status">
@@ -188,7 +189,20 @@ function App() {
         {notice && <div className="notice banner" role="status"><Check size={16} />{notice}<button className="icon" aria-label="Dismiss notice" onClick={() => setNotice('')}><X size={16} /></button></div>}
         {status?.worker_error && <div className="error banner">{status.worker_error}</div>}
 
-        {view === 'Visual logging' ? (
+        {view === 'Subjects' ? (
+          <SubjectsWorkspace
+            memories={memories}
+            status={status}
+            role={role}
+            onInspect={m => inspect(m).catch(ignoreAbort)}
+            onOpenAdd={(type, subject) => {
+              setAddingType(type || 'STANDARD');
+              setAddingSubject(subject);
+            }}
+            onGoToReview={() => { setView('Needs review'); setOffset(0); }}
+            onRefresh={() => { poll().catch(ignoreAbort); list().catch(ignoreAbort); }}
+          />
+        ) : view === 'Visual logging' ? (
           <VisualLoggingWorkspace
             memories={memories}
             status={status}
@@ -196,7 +210,7 @@ function App() {
             ready={ready}
             role={role}
             onInspect={m => inspect(m).catch(ignoreAbort)}
-            onOpenAdd={type => setAddingType(type || 'STANDARD')}
+            onOpenAdd={type => { setAddingType(type || 'STANDARD'); setAddingSubject(undefined); }}
             onGoToReview={() => { setView('Needs review'); setOffset(0); }}
             onRefresh={() => { poll().catch(ignoreAbort); list().catch(ignoreAbort); }}
           />
@@ -311,17 +325,19 @@ function App() {
     </main>
 
     {addingType !== null && (
-      <Dialog title="Add observation" onClose={() => setAddingType(null)}>
+      <Dialog title="Add observation" onClose={() => { setAddingType(null); setAddingSubject(undefined); }}>
         <StructuredObservationForm
           initialType={addingType}
+          initialSubject={addingSubject}
           busy={busy}
           onSave={async (payload: StructuredMemoryPayload) => {
             await action(async () => {
               await api('/memories', 'POST', payload);
               setAddingType(null);
+              setAddingSubject(undefined);
             }, 'Saved on the protected server. Search indexing follows automatically.');
           }}
-          onCancel={() => setAddingType(null)}
+          onCancel={() => { setAddingType(null); setAddingSubject(undefined); }}
         />
       </Dialog>
     )}

@@ -127,17 +127,19 @@ export function QuickEntryCards({
  */
 export function StructuredObservationForm({
   initialType = 'STANDARD',
+  initialSubject,
   busy,
   onSave,
   onCancel,
 }: {
   initialType?: EntryType;
+  initialSubject?: string;
   busy: boolean;
   onSave: (payload: StructuredMemoryPayload) => Promise<void>;
   onCancel: () => void;
 }) {
   const [entryType, setEntryType] = useState<EntryType>(initialType);
-  const [subject, setSubject] = useState('SYN-001');
+  const [subject, setSubject] = useState(initialSubject || 'SYN-001');
   const [privacy, setPrivacy] = useState<'SENSITIVE' | 'HIGHLY_SENSITIVE'>('SENSITIVE');
   const [importance, setImportance] = useState(0.5);
 
