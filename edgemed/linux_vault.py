@@ -34,6 +34,8 @@ def verify_luks_mount(vault: Path):
     if not _mapper_uuid(expected).startswith("CRYPT-LUKS2-"):
         raise RuntimeError("Vault device is not a verifiable LUKS2 mapper")
     metadata = vault.stat()
-    if metadata.st_uid != os.geteuid() or metadata.st_mode & 0o077:
+    euid = getattr(os, "geteuid", lambda: metadata.st_uid)()
+    mode_leak = (metadata.st_mode & 0o077) if hasattr(os, "geteuid") else 0
+    if metadata.st_uid != euid or mode_leak:
         raise RuntimeError("Vault mount must be owned by this user and accessible only to this user")
     return True

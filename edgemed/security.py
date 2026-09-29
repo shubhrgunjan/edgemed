@@ -72,7 +72,8 @@ def private_write(path: Path, data: str):
     fd = __import__("os").open(
         path, __import__("os").O_WRONLY | __import__("os").O_CREAT | __import__("os").O_TRUNC, 0o600
     )
-    os.fchmod(fd, 0o600)
+    if hasattr(os, "fchmod"):
+        os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(data)
 

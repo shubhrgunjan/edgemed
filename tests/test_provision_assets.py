@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import tarfile
 from pathlib import Path
 
@@ -70,7 +71,8 @@ def test_linux_full_provisioning_pins_archive_and_binary(tmp_path, monkeypatch, 
     monkeypatch.setattr(provisioner, "urlopen", public_asset)
     provisioner.main([])
     assert (tmp_path / ".tools/qdrant").read_bytes() == binary
-    assert (tmp_path / ".tools/qdrant").stat().st_mode & 0o111
+    if hasattr(os, "fchmod"):
+        assert (tmp_path / ".tools/qdrant").stat().st_mode & 0o111
     assert requested == [
         "https://github.com/qdrant/qdrant/releases/download/v1.19.1/"
         "qdrant-x86_64-unknown-linux-gnu.tar.gz"

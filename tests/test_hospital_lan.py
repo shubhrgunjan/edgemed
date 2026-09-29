@@ -1,6 +1,7 @@
 """Real retrieval and HTTP checks for LAN staff isolation and TLS configuration."""
 
 import json
+import os
 import secrets
 from pathlib import Path
 
@@ -23,7 +24,8 @@ def test_lan_certificate_is_explicit_private_and_bound_to_one_ip(tmp_path):
     assert data["origin"] == "https://192.168.40.10:8765"
     assert len(data["ca_fingerprint_sha256"]) == 64
     assert load(tmp_path, 8765)["bind"] == "192.168.40.10"
-    assert (tmp_path / "lan-server.key").stat().st_mode & 0o077 == 0
+    if hasattr(os, "fchmod"):
+        assert (tmp_path / "lan-server.key").stat().st_mode & 0o077 == 0
     settings = json.loads((tmp_path / "lan.json").read_text())
     settings["ip"] = "192.168.40.11"
     (tmp_path / "lan.json").write_text(json.dumps(settings))

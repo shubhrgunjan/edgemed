@@ -58,7 +58,11 @@ class Transport:
                         continue
                     payload = Export.model_validate_json(row["payload"]).model_dump(mode="json")
                     # Recheck the strict policy immediately before egress.
-                    memory = self.store.get(payload["memory_id"], include_deleted=True)
+                    try:
+                        memory = self.store.get(payload["memory_id"], include_deleted=True)
+                    except KeyError:
+                        self.store.delivery(row["id"], "cancelled", error="Policy no longer permits sharing")
+                        continue
                     if not memory["fixture"] or memory["privacy"] != "PUBLIC":
                         self.store.delivery(row["id"], "cancelled", error="Policy no longer permits sharing")
                         continue
