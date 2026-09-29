@@ -56,8 +56,8 @@ test('app layout remains usable across themes, views, and widths', async ({ page
   await expect(page.getByText('Archive / deletion')).toBeFocused();
   await page.screenshot({ path: path.resolve(process.cwd(), '../test-results/ui-inspector-mocha.png'), fullPage: true });
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Sharing & activity', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Activity history' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sync monitor', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Sync monitor/i })).toBeVisible();
   await page.screenshot({ path: path.resolve(process.cwd(), '../test-results/ui-sharing-mocha.png'), fullPage: true });
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: /^Needs review/ }).click();
   await expect(page.getByText('No conflicts to review')).toBeVisible();

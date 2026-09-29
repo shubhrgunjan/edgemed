@@ -17,13 +17,15 @@ The public link opens a **synthetic, browser-only sample**: keyword search, capt
 | Search | Pinned local embeddings, lexical retrieval, and workspace-aware access checks. Model assets are downloaded and hash-verified during setup, never fetched by runtime search. |
 | Staff demo | Separate synthetic-data accounts, shared workspace notes, creator-only personal notes, private-IP HTTPS, and server-side authorization. |
 | Optional sharing | Only reviewed synthetic reference variants enter the demo synchronization path. Staff observations do not. |
-| Interface | Responsive browser UI with Catppuccin Latte and Mocha themes and a persistent theme switch. |
+| Interface | Responsive browser UI with Catppuccin Latte and Mocha themes, dedicated Visual Logging, Synthetic Subjects roster, and Sync Monitor & Memory Lab workspaces. |
 
 The architecture is a **local server plus browsers**. A phone on the same trusted LAN can use the interface, but the backend does not run on the phone. A native Android backend and app remain on the [roadmap](TODO.md).
 
 ## Next development path
 
 - [x] Add an intuitive, visual data-logging system for fast and easy data entry, monitoring, and analysis.
+- [x] Add synthetic subjects / patient roster workspace with consolidated charts, longitudinal vitals, allergy alerts, and chronological history.
+- [x] Add Sync Monitor & Memory Lab workspace with outbound delivery queue, activity timeline, storage status, and simulation controls.
 - [ ] Complete independent security and privacy reviews before any real-data pilot.
 - [ ] Package and harden a hospital-local server with managed identity, backups, monitoring, and failover.
 - [ ] Test a physical Android device as a secure LAN browser client.

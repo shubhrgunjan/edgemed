@@ -6,6 +6,7 @@ import { ThemeToggle } from './theme';
 import { Brand, Dialog } from './ui';
 import { VisualLoggingWorkspace } from './logging';
 import { SubjectsWorkspace } from './subjects';
+import { SyncMonitorWorkspace } from './sync-monitor';
 import { StructuredObservationForm, type EntryType, type StructuredMemoryPayload } from './quick-entry';
 import type { Memory, Status, Sync } from './charts';
 
@@ -53,7 +54,7 @@ function App() {
     const [s, y] = await Promise.all([api('/status'), user === 'operator' ? api('/sync/status') : Promise.resolve(null)]); setStatus(s); setSync(y); setReady(true);
     if (generation.current !== s.generation) {
       generation.current = s.generation;
-      if (view !== 'Sharing & activity') await list();
+      if (view !== 'Sync monitor') await list();
       if (selectedId.current) {
         const id = selectedId.current;
         try { const detail = await api(`/memories/${id}`); if (selectedId.current === id) setSelected(detail); }
@@ -112,7 +113,7 @@ function App() {
   }, [user, view, offset]);
   useEffect(() => {
     if (!user) return;
-    if (view === 'Sharing & activity') api('/activity').then(setEvents).catch(ignoreAbort);
+    if (view === 'Sync monitor') api('/activity').then(setEvents).catch(ignoreAbort);
     else list().catch(ignoreAbort);
   }, [user, view, offset]);
   async function login(e: FormEvent<HTMLFormElement>) {
@@ -145,17 +146,18 @@ function App() {
   const pending = (sync?.counts?.pending ?? 0) + (sync?.counts?.retry_wait ?? 0);
   const shown = results ?? memories;
   const navItems = user === 'operator'
-    ? ['Memory', 'Subjects', 'Visual logging', 'Needs review', 'Sharing & activity']
+    ? ['Memory', 'Subjects', 'Visual logging', 'Needs review', 'Sync monitor']
     : ['Memory', 'Subjects', 'Visual logging', 'Needs review'];
 
   return <div className="shell">{menuOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`} role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? true : undefined} aria-label="Workspace navigation"><Brand /><button ref={closeMenuButton} className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><X /></button><div className="workspace"><b>{status?.workspace ?? user}</b><small>{status?.deployment === 'hospital_lan' ? 'Hospital LAN demo · synthetic' : 'Synthetic memory workspace'}</small></div>
       <nav aria-label="Primary">
         {navItems.map(v => (
-          <button className={view === v ? 'active' : ''} aria-current={view === v ? 'page' : undefined} key={v} onClick={() => { setView(v); setOffset(0); setResults(null); closeInspector(); setMenuOpen(false); }}>
-            {v === 'Memory' ? <FileText /> : v === 'Subjects' ? <Users /> : v === 'Visual logging' ? <Activity /> : v === 'Needs review' ? <GitBranch /> : <RefreshCw />}
+          <button className={view === v ? 'active' : ''} aria-current={view === v ? 'page' : undefined} key={v} onClick={() => { setView(v); setOffset(0); setResults(null); closeInspector(); if (v === 'Sync monitor') api('/activity').then(setEvents).catch(ignoreAbort); setMenuOpen(false); }}>
+            {v === 'Memory' ? <FileText /> : v === 'Subjects' ? <Users /> : v === 'Visual logging' ? <Activity /> : v === 'Needs review' ? <GitBranch /> : <Wifi />}
             {v}
             {v === 'Needs review' && !!status?.conflicts && <span className="count">{status.conflicts}</span>}
+            {v === 'Sync monitor' && !!pending && <span className="count">{pending}</span>}
           </button>
         ))}
       </nav>
@@ -173,15 +175,15 @@ function App() {
         <div className="page-heading">
           <div>
             <p className="eyebrow">{status?.deployment === 'hospital_lan' ? `Workspace ${status.workspace}` : 'Local workspace'}</p>
-            <h1>{view === 'Memory' ? 'Memory explorer' : view === 'Subjects' ? 'Synthetic subjects / patient roster' : view === 'Visual logging' ? 'Visual logging & monitoring' : view}</h1>
-            <p>{view === 'Memory' ? 'Capture an observation. Find it when you need it.' : view === 'Subjects' ? 'Consolidated patient charts, longitudinal vital trends, allergy alerts, and chronological history.' : view === 'Visual logging' ? 'Fast structured data entry, real-time observation monitoring, and telemetry status.' : view === 'Needs review' ? role === 'admin' ? 'Compare current branches before choosing a resolution.' : 'An administrator can review and resolve conflicting branches.' : 'See what is waiting, what was accepted, and what happened.'}</p>
+            <h1>{view === 'Memory' ? 'Memory explorer' : view === 'Subjects' ? 'Synthetic subjects / patient roster' : view === 'Visual logging' ? 'Visual logging & monitoring' : view === 'Sync monitor' ? 'Sync monitor & Memory Lab' : view}</h1>
+            <p>{view === 'Memory' ? 'Capture an observation. Find it when you need it.' : view === 'Subjects' ? 'Consolidated patient charts, longitudinal vital trends, allergy alerts, and chronological history.' : view === 'Visual logging' ? 'Fast structured data entry, real-time observation monitoring, and telemetry status.' : view === 'Sync monitor' ? 'Outbound queue, delivery receipts, policy decisions, storage status, and Memory Lab simulation.' : view === 'Needs review' ? role === 'admin' ? 'Compare current branches before choosing a resolution.' : 'An administrator can review and resolve conflicting branches.' : 'See what is waiting, what was accepted, and what happened.'}</p>
           </div>
           <button className="primary" onClick={() => { setAddingType('STANDARD'); setAddingSubject(undefined); }}><Plus size={16} />Add observation</button>
         </div>
 
         <div className="status-row" role="status">
           <span className={ready ? 'good' : 'warn'}><HardDrive size={16} />{ready ? 'Local workspace ready' : 'Local service unavailable — saving cannot be confirmed'}</span>
-          {user === 'operator' && <><span>{sync?.connection === 'connected' ? <Wifi size={16} /> : <WifiOff size={16} />}{connectionLabels[sync?.connection ?? 'unknown']}</span><button onClick={() => setView('Sharing & activity')}>{pending} approved updates pending</button></>}
+          {user === 'operator' && <><span>{sync?.connection === 'connected' ? <Wifi size={16} /> : <WifiOff size={16} />}</span><span>{connectionLabels[sync?.connection ?? 'unknown']}</span><button onClick={() => setView('Sync monitor')}>{pending} approved updates pending</button></>}
           <button onClick={() => setView('Needs review')}>{status?.conflicts ?? 0} conflicts</button>
         </div>
 
@@ -214,7 +216,7 @@ function App() {
             onGoToReview={() => { setView('Needs review'); setOffset(0); }}
             onRefresh={() => { poll().catch(ignoreAbort); list().catch(ignoreAbort); }}
           />
-        ) : view !== 'Sharing & activity' ? (
+        ) : view !== 'Sync monitor' ? (
           <>
             <div className="toolbar">
               <form className="search" onSubmit={search}>
@@ -265,59 +267,20 @@ function App() {
             )}
           </>
         ) : (
-          <>
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>{connectionLabels[sync?.connection ?? 'unknown']}</h2>
-                  <p>Only reviewed synthetic reference variants can leave this device.</p>
-                  <small>Last verified contact: {date(sync?.last_sync)}</small>
-                </div>
-                <div className="actions">
-                  <button className="secondary" disabled={busy} onClick={() => action(() => api('/sync/transport', 'POST', { enabled: !sync?.enabled }), sync?.enabled ? 'Sharing paused. Local work continues.' : 'Sharing enabled; checking the shared service.')}>{sync?.enabled ? 'Pause sharing' : 'Enable sharing'}</button>
-                  <button className="primary" disabled={busy || !sync?.enabled} onClick={() => action(() => api('/sync', 'POST'), 'Sharing attempt finished. Check the status below.')}>Sync now</button>
-                </div>
-              </div>
-              {sync?.error && <p className="error">{sync.error}</p>}
-              <div className="queue-summary">
-                <b>{pending} waiting / retrying</b>
-                <span>{sync?.counts?.failed ?? 0} need attention</span>
-                <span>{sync?.counts?.acknowledged ?? 0} accepted centrally</span>
-              </div>
-              <p className="muted">Central acceptance does not confirm receipt on another device. Check Device B to demonstrate delivery.</p>
-              {sync?.items.length ? (
-                sync.items.slice(-40).reverse().map(item => (
-                  <div className="queue-item" key={item.id}>
-                    <span>Approved reference update<small>{item.attempts} attempts{item.error ? ` · ${item.error}` : ''}</small></span>
-                    <span className="badge">{item.state === 'acknowledged' ? 'Accepted centrally' : item.state.replaceAll('_', ' ')}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="empty">No approved updates waiting. Private observations never enter this queue.</div>
-              )}
-              <details>
-                <summary>Reference cache and diagnostics</summary>
-                <p>Search always runs locally. A signed reference-cache refresh is optional.</p>
-                <button className="secondary" disabled={busy || !sync?.enabled} onClick={() => action(() => api('/sync/reference-snapshot', 'POST'), 'Signed reference cache verified and activated.')}>Refresh reference cache</button>
-                <p>Encrypted vault: {status?.vault ? 'Verified at startup' : 'Test environment'} · SQLCipher + Qdrant Edge</p>
-              </details>
-            </section>
-            <section className="panel">
-              <h2><Activity size={20} /> Activity history</h2>
-              <button className="secondary" onClick={() => api('/activity').then(setEvents).catch(ignoreAbort)}>Refresh activity</button>
-              <div className="timeline">
-                {events.map((e, i) => (
-                  <div key={i}>
-                    <b>{e.action.replaceAll('_', ' ')}</b>
-                    <span>{e.device}</span>
-                    <time>{date(e.time)}</time>
-                  </div>
-                ))}
-                {events.length === 0 && <p className="muted">No activity recorded yet.</p>}
-              </div>
-              <small>Metadata-only audit events. Chaining is verified at startup; it does not prove protection against whole-store rollback.</small>
-            </section>
-          </>
+          <SyncMonitorWorkspace
+            sync={sync}
+            status={status}
+            memories={memories}
+            events={events}
+            busy={busy}
+            ready={ready}
+            role={role}
+            onToggleTransport={() => action(() => api('/sync/transport', 'POST', { enabled: !sync?.enabled }), sync?.enabled ? 'Sharing paused. Local work continues.' : 'Sharing enabled; checking the shared service.')}
+            onSyncNow={() => action(() => api('/sync', 'POST'), 'Sharing attempt finished. Check the status below.')}
+            onRefreshSnapshot={() => action(() => api('/sync/reference-snapshot', 'POST'), 'Signed reference cache verified and activated.')}
+            onRefreshActivity={() => api('/activity').then(setEvents).catch(ignoreAbort)}
+            onRefresh={() => { poll().catch(ignoreAbort); }}
+          />
         )}
 
         <footer>Local memory · Explicit sharing · Human review</footer>
