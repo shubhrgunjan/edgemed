@@ -14,7 +14,7 @@ EdgeMed is an offline-first, local-first clinical memory and retrieval research 
 * **Architectural integrity:** Adherence to zero-cloud dependencies, local-first canonical persistence, and layered boundaries.
 * **Security & boundary enforcement:** Verification of multi-tenant workspace isolation, personal observation privacy, CSRF/origin/host defenses, fail-closed storage, and egress leakage prevention.
 * **Storage & ledger robustness:** SQLCipher 4 encryption, append-only revision DAGs, tombstone deletion truthfulness, and tamper-evident HMAC event chaining.
-* **Retrieval & scalability performance:** Dual-projection hybrid search (dense ONNX vector embeddings + sparse inverted index) sustaining sub-10ms query latencies at 10,000+ records.
+* **Retrieval & scalability performance:** Dual-projection hybrid search (dense ONNX vector embeddings + sparse inverted index). The committed Windows synthetic benchmark measured 63.98 ms warm p50 at 10,000 records; timings vary by corpus and machine.
 * **Frontend presentation:** Responsive React 19 interface across Visual Data Logging, Synthetic Subjects Roster, and Sync Monitor & Memory Lab workspaces.
 * **Verification suite:** 77 passing backend integration/unit tests and 4 end-to-end Playwright browser test suites.
 
@@ -93,13 +93,13 @@ EdgeMed is an offline-first, local-first clinical memory and retrieval research 
 
 ### 5.2 Performance Benchmarks Across Scale
 
-| Metric | 1,000 Synthetic Records | 10,000 Synthetic Records (Optimized) | Previous Bottleneck (Pre-Optimization) |
-| :--- | :--- | :--- | :--- |
-| **Complete Backend Search (p50)** | **~4.3 ms** | **~8.9 ms** | ~101.5 ms (Exceeded 32 MiB cache) |
-| **Complete Backend Search (p95)** | **~7.8 ms** | **~14.6 ms** | ~142.0 ms |
-| **Lexical Search Time (p50)** | **~1.1 ms** | **~2.8 ms** | ~92.0 ms (Inverted index eliminated corpus prep) |
-| **Vector Search Time (p50)** | **~3.2 ms** | **~6.1 ms** | ~9.5 ms |
-| **Index Query Path Memory** | Stable (<12 MiB) | Stable (<18 MiB) | Excessive memory thrashing |
+| Windows 11 synthetic records | Complete backend warm p50 | Complete backend warm p95 |
+| :--- | ---: | ---: |
+| 1,000 | 8.46 ms | 21.49 ms |
+| 5,000 | 34.08 ms | 39.50 ms |
+| 10,000 | 63.98 ms | 73.81 ms |
+
+These values come from [the committed scaling run](scaling-benchmark-results.json). An earlier [macOS 10,000-record run](search-10k.json) measured 101.48 ms p50, but its different host and harness conditions make it unsuitable as a direct before/after speedup claim. The 10,000-record Windows run's median embedding, keyword, and fusion spans were 14.606, 10.119, and 28.407 ms respectively; separate medians are not additive.
 
 ---
 
@@ -148,4 +148,4 @@ EdgeMed is an offline-first, local-first clinical memory and retrieval research 
 
 ## 9. Final Audit Verdict
 
-EdgeMed demonstrates strong defense-in-depth engineering, strict architectural separation of concerns, and verified multi-tenant isolation. All five project milestones have been successfully designed, implemented, and verified. The system operates strictly as a **synthetic-data research prototype** and meets all requirements established for Team LEX Problem Statement 03.
+EdgeMed demonstrates automated boundary checks and a working synthetic-data prototype across the implemented workspaces. Physical Linux encrypted-host, mobile certificate, outage, and disaster-recovery rehearsals listed above remain pending. The system operates strictly as a **synthetic-data research prototype**; this automated audit is not an independent security or clinical review.
