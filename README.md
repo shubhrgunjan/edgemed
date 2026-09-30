@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://farhanakhtar0x66.github.io/edgemed-synthetic-demo/"><img src="https://img.shields.io/badge/Live%20Demo-Browser%20Sample-40a02b?style=flat-square&logo=googlechrome&logoColor=white" alt="Live Demo" /></a>
+  <a href="https://www.youtube.com/watch?v=-EHztt86J2c"><img src="https://img.shields.io/badge/Demo%20Video-YouTube-ff0000?style=flat-square&logo=youtube&logoColor=white" alt="Demo Video" /></a>
   <a href="https://github.com/shubhrgunjan/edgemed"><img src="https://img.shields.io/badge/GitHub-shubhrgunjan%2Fedgemed-181825?style=flat-square&logo=github&logoColor=white" alt="GitHub" /></a>
   <img src="https://img.shields.io/badge/Version-0.1.0-89b4fa?style=flat-square" alt="Version 0.1.0" />
   <img src="https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python 3.12" />
@@ -25,6 +26,11 @@
 
 > [!CAUTION]
 > **Synthetic Data Notice:** EdgeMed is a research prototype developed for Team LEX Problem Statement 03. It is **not approved for clinical use or real patient records**. All notes and entities must remain synthetic.
+
+---
+
+> [!TIP]
+> 📺 **Video Walkthrough & Architecture Demo:** Watch the complete 3-minute architectural and live demo walkthrough on YouTube: [EdgeMed — Offline-First Clinical Memory | Demo](https://www.youtube.com/watch?v=-EHztt86J2c)
 
 ---
 
@@ -167,6 +173,7 @@ uv run pytest -q
 
 ## Technical Documentation Directory
 
+* **[Video Walkthrough & Architecture Demo](https://www.youtube.com/watch?v=-EHztt86J2c):** Complete 3-minute recording demonstrating offline-first clinical memory, sub-10ms hybrid search benchmarks, and the local care workspace.
 * **[Comprehensive Project Audit](docs/PROJECT_AUDIT.md):** Full component inventory, security audit, storage audit, and validation matrix.
 * **[System Architecture Blueprint](docs/SYSTEM_ARCHITECTURE.md):** Deep-dive multi-tier architecture, layer flow, data flow sequence diagrams, and guarantees.
 * **[Features & Workspace Guide](docs/FEATURES_GUIDE.md):** Comprehensive visual walkthrough of all 4 application workspaces and themes.
