@@ -73,3 +73,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci && npm run build && npm run build:demo
         working-directory: frontend
+      - name: Exercise built UI across workspaces and viewport sizes
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium --only-shell
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist >/tmp/edgemed-app-http.log 2>&1 &
+          app_pid=$!
+          python3 -m http.server 4174 --bind 127.0.0.1 --directory dist-demo >/tmp/edgemed-demo-http.log 2>&1 &
+          demo_pid=$!
+          trap 'kill "$app_pid" "$demo_pid"' EXIT
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:4173/ >/dev/null
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:4174/ >/dev/null
+          EDGEMED_UI_REVIEW_URL=http://127.0.0.1:4173 \
+          EDGEMED_PUBLIC_DEMO_URL=http://127.0.0.1:4174 \
+          npx playwright test tests/ui-layout.spec.ts tests/visual-logging.spec.ts tests/subjects.spec.ts tests/sync-monitor.spec.ts tests/public-demo.spec.ts

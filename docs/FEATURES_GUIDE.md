@@ -158,7 +158,7 @@ The Sync Monitor & Memory Lab workspace (`frontend/src/sync-monitor.tsx`) provid
 ### Key Capabilities
 * **Connectivity Hero:** Displays real-time transport status (`connected`, `paused`, `stale`, `attention`, `unavailable`), device identity, and timestamp of last synchronization.
 * **Outbound Queue Inspector:** Granular inspection of synchronization envelopes with state filter chips (`pending`, `retry_wait`, `failed`, `cancelled`, `acknowledged`).
-* **Double Egress Verification:** Displays explicit verification that zero clinical notes exist in the egress queue.
+* **Egress Policy Visibility:** Displays the approved-reference sharing rule and queue status. The UI is not an independent proof that no sensitive record can leave the server.
 * **Activity Audit Event Timeline:** Searchable feed of chronological system events cryptographically chained via HMAC-SHA256.
 * **Memory Lab Simulator:** Interactive controls for simulating network partitions, intermittent connectivity, and concurrent multi-head merge conflicts.
 
@@ -192,7 +192,7 @@ The Core Memory workspace (`frontend/src/main.tsx`) provides low-latency hybrid 
 ```
 
 ### Key Capabilities
-* **Sub-10ms Hybrid Search:** Combines dense vector cosine similarity (FastEmbed ONNX) and sparse inverted posting scores (SQLite BM25) using Reciprocal Rank Fusion ($k=60$).
+* **Local Hybrid Search:** Combines dense vector cosine similarity (FastEmbed ONNX) and sparse inverted posting scores (SQLite BM25) using Reciprocal Rank Fusion ($k=60$). The [committed Windows synthetic benchmark](scaling-benchmark-results.json) measured 8.46 ms warm p50 at 1,000 records and 63.98 ms at 10,000; this is not a universal latency guarantee.
 * **Current-Head Authorization:** Enforces canonical SQLCipher verification on candidate results; deleted records return 404 and leave no search traces.
 * **Revision History & Conflict Resolution:** Complete audit history for every memory. If concurrent offline edits create multiple active heads, a warning banner prompts the administrator to execute a three-way branch resolution.
 

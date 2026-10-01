@@ -793,6 +793,8 @@ details[open] summary { margin-bottom: var(--space-4); }
 .conflict-banner-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: var(--space-2);
 }
 

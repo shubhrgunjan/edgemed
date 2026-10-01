@@ -251,7 +251,7 @@ The following operational aspects cannot be fully verified via mock/synthetic un
 
 ## 9. Conclusion & Security Gate Statement
 
-EdgeMed's security architecture enforces defense-in-depth across the HTTP boundary, workspace scoping, cryptographic storage, and synchronization egress. Automated boundary tests guarantee that **no staff observations or patient data can leave the device**, unauthorized cross-ward access is blocked, and deleted records leave no residual search traces.
+EdgeMed has defense-in-depth controls across the HTTP boundary, workspace scoping, cryptographic storage, and synchronization egress. Automated tests exercise the intended exclusion of staff observations from sync, cross-workspace access checks, and deletion from active search. They do not prove the absence of all vulnerabilities or authorize handling real patient data.
 
 However, EdgeMed remains a **research prototype**. Before any progression toward production or handling of identifiable patient data, EdgeMed must undergo:
 1. An independent, third-party penetration test and code audit.
