@@ -45,6 +45,23 @@ In field hospitals, rural clinics, acute disaster response zones, and hospital I
 
 ---
 
+## Problem Statement 03 Alignment (Qdrant Hackathon)
+
+EdgeMed was purpose-built to address every objective of **Problem Statement 03 — AI-Powered Edge Memory & Intelligence Platform**:
+
+| PS-03 Core Requirement | How EdgeMed Delivers | Verification & Code |
+| :--- | :--- | :--- |
+| **Searchable Semantic Memory on Edge** | Runs embedded **Qdrant Edge** with local **FastEmbed ONNX** (`bge-small-en-v1.5`, 384-d) directly in-process on CPU without external services. | [`edgemed/retrieval.py`](file:///c:/Users/aryan/Projects/EdgeMed/edgemed/retrieval.py) |
+| **Low-Latency Vector & Hybrid Search** | **8.9 ms p50** at 10,000 records combining dense vector search + sparse BM25 inverted index via **Reciprocal Rank Fusion (RRF $k=60$)**. | [`tests/test_retrieval_performance.py`](file:///c:/Users/aryan/Projects/EdgeMed/tests/test_retrieval_performance.py) |
+| **Dynamic On-Device vs. Sync Decisions** | Strict **Privacy Egress Firewall**: patient clinical notes are permanently pinned `LOCAL_ONLY`; only reviewed public reference fixtures can sync. | [`edgemed/sync.py`](file:///c:/Users/aryan/Projects/EdgeMed/edgemed/sync.py) |
+| **Intermittent Offline Connectivity** | Offline-first state machine; all observations commit to encrypted SQLCipher WAL mode and buffer seamlessly during network drops. | [`docs/SYSTEM_ARCHITECTURE.md`](file:///c:/Users/aryan/Projects/EdgeMed/docs/SYSTEM_ARCHITECTURE.md) |
+| **Edge-to-Server Synchronization** | Idempotent **mTLS 1.3** transport with **Ed25519** signed envelopes and verified reference snapshot ingestion with tarbomb defense. | [`edgemed/snapshots.py`](file:///c:/Users/aryan/Projects/EdgeMed/edgemed/snapshots.py) |
+| **Evolving Memory & Conflict Handling** | **Append-only Revision DAG** preserves full history; concurrent edits branch cleanly into multi-heads for clinician-guided 3-way resolution. | [Conflict Flow](docs/SYSTEM_ARCHITECTURE.md#data-flow-c-revision-dag-branching--multi-head-conflict-resolution) |
+| **User Interface for Inspection** | 4-workspace **React 19 SPA** (Visual Logging, Synthetic Subjects, Sync Monitor & Memory Lab, Hybrid Search Engine). | [`frontend/src/`](file:///c:/Users/aryan/Projects/EdgeMed/frontend/src/) |
+| **Meaningful Edge-to-Cloud Workflow** | Real-world clinical care network: local patient records stay encrypted and private at the edge, while global protocols sync centrally. | [Architecture Blueprint](docs/SYSTEM_ARCHITECTURE.md#1-high-level-architectural-blueprint) |
+
+---
+
 ## System Architecture Blueprint & Layer Flow
 
 EdgeMed enforces strict separation of concerns across six well-defined boundaries:
