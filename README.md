@@ -60,6 +60,16 @@ EdgeMed was purpose-built to address every objective of **Problem Statement 03 â
 | **User Interface for Inspection** | 4-workspace **React 19 SPA** (Visual Logging, Synthetic Subjects, Sync Monitor & Memory Lab, Hybrid Search Engine). | [`frontend/src/`](file:///c:/Users/aryan/Projects/EdgeMed/frontend/src/) |
 | **Meaningful Edge-to-Cloud Workflow** | Real-world clinical care network: local patient records stay encrypted and private at the edge, while global protocols sync centrally. | [Architecture Blueprint](docs/SYSTEM_ARCHITECTURE.md#1-high-level-architectural-blueprint) |
 
+<br/>
+
+<p align="center">
+  <b>EdgeMed Edge-to-Cloud Architecture & Workflow Solution</b>
+</p>
+
+<p align="center">
+  <img src="assets/edgemed-workflow-solution.png" alt="EdgeMed Edge-to-Cloud Architecture & Workflow Solution" width="800" />
+</p>
+
 ---
 
 ## System Architecture Blueprint & Layer Flow
