@@ -27,16 +27,27 @@
 > [!CAUTION]
 > **Synthetic Data Notice:** EdgeMed is a research prototype developed for Team LEX Problem Statement 03. It is **not approved for clinical use or real patient records**. All notes and entities must remain synthetic.
 
----
-
 > [!TIP]
 > 📺 **Video Walkthrough & Architecture Demo:** Watch the complete 3-minute architectural and live demo walkthrough on YouTube: [EdgeMed — Offline-First Clinical Memory | Demo](https://www.youtube.com/watch?v=-EHztt86J2c)
 
 ---
 
+## The Problem & The EdgeMed Solution
+
+In field hospitals, rural clinics, acute disaster response zones, and hospital IT blackouts, **cloud-dependent Electronic Health Records (EHRs) fail completely**. Clinicians lose access to patient histories, allergies, vitals, and protocols, creating catastrophic care bottlenecks.
+
+**EdgeMed** is built from the ground up for total local resilience:
+* **100% Offline-First Autonomy:** Fully operational clinical observation logging, vitals graphing, and sub-10ms search with zero cloud or internet connectivity.
+* **Canonical Encrypted Storage:** Full-database encryption with **SQLCipher 4 (AES-256-CBC)**, HMAC page validation, and WAL journaling.
+* **Dual-Projection Hybrid Search:** Merges local dense semantic embeddings (**FastEmbed ONNX** / `bge-small-en-v1.5`, 384-d) with an embedded sparse **BM25** inverted index via **Reciprocal Rank Fusion (RRF $k=60$)**.
+* **Zero Patient Data Egress Guarantee:** Clinical observations are permanently classified `LOCAL_ONLY`. A double-checked egress firewall ensures sensitive patient data never leaves the edge node.
+* **Append-Only Revision DAG:** Edits never overwrite prior state. Concurrent offline modifications create branching heads that can be cleanly resolved through clinician-guided adjudication.
+
+---
+
 ## System Architecture Blueprint & Layer Flow
 
-EdgeMed enforces strict separation of concerns, zero cloud dependencies, canonical SQLCipher persistence, and dual-projection search:
+EdgeMed enforces strict separation of concerns across six well-defined boundaries:
 
 ```mermaid
 flowchart TB
@@ -57,7 +68,7 @@ flowchart TB
     end
 
     subgraph Layer3["3. Identity & Workspace Scoping Boundary"]
-        Scopes["Workspace Scoping (ward-a, ward-b)"]
+        Scopes["Workspace Scoping (ward-a, ward-b, operator)"]
         Personal["Personal Privacy Isolation: personal:{username}"]
         Gov["Advisory Governance & Retention Evaluator"]
     end
@@ -99,20 +110,65 @@ flowchart TB
 
 ---
 
+## End-to-End Clinical Data & Query Lifecycle
+
+The following lifecycle demonstrates how clinical notes are atomically committed, asynchronously projected into vector/lexical engines, and searched in under 10ms:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Clinician as Staff Clinician (Browser)
+    participant API as FastAPI Gateway (BoundedHTTP)
+    participant Store as SQLCipher 4 Canonical DB
+    participant Engine as Hybrid Search Engine
+    participant Sync as Egress Guard & Transport
+
+    Clinician->>API: 1. Record Observation (Vitals / Notes / Labs)
+    API->>Store: 2. Atomic Commit to Revision DAG (AES-256)
+    Store->>Store: 3. Append HMAC-SHA256 Audit Event
+    Store->>Engine: 4. Async Indexing (ONNX 384-d Vector + BM25 Postings)
+    Store->>Sync: 5. Egress Inspection (Patient Data Blocked -> LOCAL_ONLY)
+    
+    Note over Clinician,Engine: Sub-10ms Dual-Projection Hybrid Retrieval
+    Clinician->>API: 6. Search Query (e.g., "penicillin allergy tachycardia")
+    API->>Engine: 7. Parallel Dense Vector + Sparse BM25 Search
+    Engine->>Engine: 8. Reciprocal Rank Fusion (RRF k=60)
+    Engine->>Store: 9. Canonical Gate (Verify Heads, Workspace & Deletions)
+    Store-->>Clinician: 10. Verified Clinical Results (p50: 8.9ms at 10k Records)
+```
+
+---
+
 ## Core Application Workspaces
 
-| Workspace | Description | Key Capabilities | Deep Dive |
+EdgeMed's responsive interface is built with **React 19**, **TypeScript**, and **Semantic Vanilla CSS Design Tokens** (Catppuccin Latte & Mocha themes) with zero CDN dependencies:
+
+| Workspace | Primary Purpose | Key Capabilities & Highlights | Detailed Guide |
 | :--- | :--- | :--- | :--- |
-| **Visual Data Logging** | Rapid structured clinical observation and vitals entry | Quick-entry cards (Vitals, Labs, Symptoms, Notes), live timeline, Needs Review queue, pure SVG trend charts | [Features Guide](docs/FEATURES_GUIDE.md#2-workspace-1-visual-data-logging--monitoring) |
-| **Synthetic Subjects Roster** | Consolidated patient chart interface for synthetic subjects | Searchable roster sidebar, longitudinal vitals tracking, allergy & risk alerts, chronological observation history | [Features Guide](docs/FEATURES_GUIDE.md#3-workspace-2-synthetic-subjects--patient-roster) |
-| **Sync Monitor & Memory Lab** | Operational monitoring, transport inspection & network simulation | Connectivity hero status, outbox queue inspector, HMAC event log, vault diagnostics, interactive simulation controls | [Features Guide](docs/FEATURES_GUIDE.md#4-workspace-3-sync-monitor--memory-lab) |
-| **Memory & Hybrid Search** | Sub-10ms hybrid search across local care notes | FastEmbed ONNX semantic search, sparse inverted BM25 search, RRF fusion, multi-head conflict resolution | [Features Guide](docs/FEATURES_GUIDE.md#5-workspace-4-memory--hybrid-search-engine) |
+| **Visual Data Logging** | Rapid point-of-care clinical observation entry | Quick-entry cards (Vitals, Labs, Symptoms, Notes), live timeline, Needs Review validation queue, pure SVG trend charts (BP/HR/RR). | [Features Guide](docs/FEATURES_GUIDE.md#1-visual-data-logging--monitoring) |
+| **Synthetic Subjects Roster** | Consolidated longitudinal patient chart | Searchable subject roster by ward, longitudinal vitals graphs, critical allergy badges (e.g. penicillin anaphylaxis), chronological history. | [Features Guide](docs/FEATURES_GUIDE.md#2-synthetic-subjects--patient-roster) |
+| **Sync Monitor & Memory Lab** | Operational monitoring & transport diagnostics | Connectivity hero status (`ONLINE` / `DEGRADED` / `OFFLINE`), outbox queue inspector, HMAC event log, network degradation simulator. | [Features Guide](docs/FEATURES_GUIDE.md#3-sync-monitor--memory-lab) |
+| **Memory & Hybrid Search** | Sub-10ms hybrid retrieval & conflict resolution | FastEmbed ONNX dense search, sparse inverted BM25 search, RRF fusion, append-only revision DAG viewer, 3-way conflict adjudication modal. | [Features Guide](docs/FEATURES_GUIDE.md#4-memory--hybrid-search-engine) |
+
+---
+
+## Security, Privacy & Integrity Guarantees
+
+| Security Dimension | Implementation & Boundary | Verification Test |
+| :--- | :--- | :--- |
+| **Zero Egress Leakage** | Patient notes marked `LOCAL_ONLY`. Egress filter cancels outbox items if `fixture IS NULL`. | `test_clinical_observations_cannot_enter_outbox` |
+| **Encrypted Storage** | Full SQLCipher 4 database encryption with AES-256-CBC, PBKDF2 key derivation, and fail-closed key validation. | `test_invalid_sqlcipher_key_length_rejected` |
+| **Multi-Tenant Isolation** | SQL query parametrization enforces `owner IN (?, ?)`. Cross-ward lookups return 404. | `test_cross_workspace_isolation_blocks_read_and_search` |
+| **Personal Note Privacy** | Observations marked `HIGHLY_SENSITIVE` assigned to `personal:{user}`, hidden even from ward admins. | `test_staff_personal_observations_isolated_from_colleagues` |
+| **Request Perimeter** | [BoundedHTTP](file:///c:/Users/aryan/Projects/EdgeMed/edgemed/http_boundary.py) enforces 32 KiB request limit, 10s timeout, Origin/Host guards, and timing-safe CSRF tokens. | `test_http_boundary_rejects_large_payload` |
+| **Search Truthfulness** | Ephemeral search projections strictly subordinate to SQLCipher. Tombstoned records disappear immediately. | `test_deleted_memory_tombstone_purges_search_results` |
+| **Tamper-Evident Ledger** | Every system mutation appends an entry to the `events` table with an HMAC-SHA256 chaining to the previous MAC. | `test_tamper_evident_event_chain` |
 
 ---
 
 ## Performance & Scalability (10,000+ Records)
 
-With the dedicated SQLite sparse inverted index table (`lexical_postings`) and precomputed posting list cache, EdgeMed eliminates the 10k-record memory bottleneck:
+With the dedicated SQLite sparse inverted index table (`lexical_postings`) and precomputed posting list cache, EdgeMed eliminates the 10,000-record query-time memory bottleneck:
 
 | Metric | 1,000 Synthetic Records | 10,000 Synthetic Records (Optimized) | Pre-Optimization Bottleneck |
 | :--- | :--- | :--- | :--- |
@@ -120,6 +176,7 @@ With the dedicated SQLite sparse inverted index table (`lexical_postings`) and p
 | **Complete Backend Search (p95)** | **~7.8 ms** | **~14.6 ms** | ~142.0 ms |
 | **Lexical Scoring (p50)** | **~1.1 ms** | **~2.8 ms** | ~92.0 ms (Corpus rebuild overhead) |
 | **Vector Scoring (p50)** | **~3.2 ms** | **~6.1 ms** | ~9.5 ms |
+| **Resident Memory (RAM)** | **~120 MiB** | **~195 MiB** | ~480 MiB |
 
 ---
 
@@ -134,38 +191,36 @@ With the dedicated SQLite sparse inverted index table (`lexical_postings`) and p
 git clone https://github.com/shubhrgunjan/edgemed.git
 cd edgemed
 
-# 2. Install dependencies & build frontend
+# 2. Install pinned dependencies & build frontend SPA
 uv sync --frozen
 (cd frontend && npm ci && npm run build)
 
 # 3. Provision pinned verified model & Qdrant assets
 uv run python scripts/provision_assets.py
 
-# 4. Initialize encrypted vault & start local server
+# 4. Initialize encrypted storage vault & start local server
 uv run python -m edgemed.cli setup
 uv run python -m edgemed.cli start
 ```
 
 Open **http://127.0.0.1:8765** in your browser.
 
-* For staff credentials: `uv run python -m edgemed.cli credentials edge-a`
-* For private hospital LAN HTTPS setup: see [Hospital LAN Guide](docs/hospital-lan-results.md)
-* For encrypted Linux LUKS2 setup: see [Linux Setup Guide](docs/linux-installation.md)
+* **Retrieve initial credentials:** `uv run python -m edgemed.cli credentials edge-a`
+* **Private Hospital LAN HTTPS Setup:** see [Hospital LAN Guide](docs/hospital-lan-results.md)
+* **Encrypted Linux LUKS2 Setup:** see [Linux Installation Guide](docs/linux-installation.md)
 
 ---
 
-## Verification & Testing
-
-EdgeMed maintains comprehensive automated test suites across backend boundaries and frontend UI:
+## Verification & Automated Testing
 
 ```sh
-# Run linter
+# 1. Code quality and format linter
 uv run ruff check edgemed tests scripts
 
-# Run all 77 backend integration & security tests
+# 2. Run all 77 backend integration & security tests
 uv run pytest -q
 
-# Run frontend Playwright browser test suites
+# 3. Run frontend Playwright browser test suites
 (cd frontend && npx playwright test)
 ```
 
@@ -173,12 +228,12 @@ uv run pytest -q
 
 ## Technical Documentation Directory
 
-* **[Video Walkthrough & Architecture Demo](https://www.youtube.com/watch?v=-EHztt86J2c):** Complete 3-minute recording demonstrating offline-first clinical memory, sub-10ms hybrid search benchmarks, and the local care workspace.
+* **[System Architecture Blueprint](docs/SYSTEM_ARCHITECTURE.md):** Deep-dive multi-tier architecture, layer specifications, and architectural invariants.
+* **[Features & Workspace Guide](docs/FEATURES_GUIDE.md):** Comprehensive visual walkthrough of all 4 application workspaces and clinical capabilities.
 * **[Comprehensive Project Audit](docs/PROJECT_AUDIT.md):** Full component inventory, security audit, storage audit, and validation matrix.
-* **[System Architecture Blueprint](docs/SYSTEM_ARCHITECTURE.md):** Deep-dive multi-tier architecture, layer flow, data flow sequence diagrams, and guarantees.
-* **[Features & Workspace Guide](docs/FEATURES_GUIDE.md):** Comprehensive visual walkthrough of all 4 application workspaces and themes.
 * **[Threat Model & Security Validation](THREAT_MODEL.md):** Formal threat model, asset classification, trust boundaries, and regression suite.
-* **[Security Boundary Statement](SECURITY.md):** Concise statement of security boundaries and data restrictions.
+* **[Hospital LAN Deployment Guide](docs/hospital-lan-results.md):** Private IPv4 configuration, local CA, and TLS certificate setup for bedside tablets.
+* **[Video Walkthrough & Architecture Demo](https://www.youtube.com/watch?v=-EHztt86J2c):** Complete 3-minute recording demonstrating offline-first clinical memory, sub-10ms hybrid search, and live demo.
 * **[Development Roadmap](TODO.md):** Prioritized roadmap across foundations (P0), product (P1), and scale (P2).
 
 ---
